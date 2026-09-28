@@ -19,16 +19,11 @@
 .cassette-screw{position:absolute;top:15px;width:7px;height:7px;border-radius:50%;background:#6ff1ed;box-shadow:inset 0 1px 1px #fff,0 0 5px #2fe0df}
 .screw-a{left:17px}.screw-b{right:17px}
 .cassette-window{position:absolute;z-index:3;left:50%;top:17px;transform:translateX(-50%);width:142px;height:51px;border:5px solid #36d9df;border-radius:9px;background:#12102f;display:flex;align-items:center;justify-content:space-around;box-shadow:inset 0 0 14px #05030f,0 0 8px #43dfe08c;overflow:hidden}
-.cassette-window .tape-reel{position:relative;z-index:2;display:block;flex:0 0 31px;width:31px;height:31px;aspect-ratio:1;border:4px solid #75f4ef;border-radius:999px;background:conic-gradient(from 15deg,#241542 0 8%,#ffea9a 9% 14%,#40235c 15% 28%,#ffea9a 29% 34%,#40235c 35% 48%,#ffea9a 49% 54%,#40235c 55% 68%,#ffea9a 69% 74%,#40235c 75% 88%,#ffea9a 89% 94%,#241542 95%);box-shadow:0 0 0 3px #090722,inset 0 0 0 4px #69427d,0 0 7px #49e3df99}
-.cassette-window .tape-reel:before{content:'';position:absolute;inset:7px;border-radius:50%;background:#fff1a8;box-shadow:inset 0 0 0 2px #6e3d76}
-.cassette-window .tape-reel:after{content:'';position:absolute;inset:-3px;border:5px solid #c76c4e;border-radius:50%;box-shadow:0 0 4px #ff9a73;animation:supply-pack 24s ease-in-out infinite alternate}
-.cassette-window .reel-right:after{animation-name:takeup-pack}
-.tape-transport{position:absolute;z-index:1;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
-.tape-transport .tape-path{fill:none;stroke:#71362f;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 3px #ff9a73)}
-.tape-transport .tape-motion{fill:none;stroke:#ef9a6e;stroke-width:2;stroke-dasharray:9 7;stroke-linecap:round;animation:tape-path-travel .7s linear infinite}
-.tape-transport circle{fill:#23143c;stroke:#73eeea;stroke-width:3}.tape-transport rect{fill:#fff1a8;stroke:#6d3d75;stroke-width:2}
-.cassette-label{position:absolute;z-index:2;left:17px;right:17px;top:72px;height:58px;padding:8px 12px 6px 23px;clip-path:polygon(3% 0,97% 0,100% 13%,100% 87%,97% 100%,3% 100%,0 87%,0 13%);background-color:#fff8c9;background-image:repeating-linear-gradient(to bottom,transparent 0 18px,#50aeca66 19px 20px);display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;gap:5px;color:#3e2257;transform:rotate(.4deg);box-shadow:0 2px 7px #34124266,inset 0 0 0 1px #d8a75a}
-.cassette-label:before{content:'';position:absolute;left:16px;top:3px;bottom:3px;width:1px;background:#e06a817d}
+.cassette-window .tape-reel{position:relative;z-index:2;display:block;flex:0 0 36px;width:36px;height:36px;aspect-ratio:1;border:3px solid #ffc08a;border-radius:50%;background:conic-gradient(from 12deg,#6c302d,#b65a43 12%,#6c302d 24%,#c26b4d 36%,#6c302d 48%,#b65a43 60%,#6c302d 72%,#c26b4d 84%,#6c302d),repeating-radial-gradient(circle,#71342f 0 2px,#9e4939 3px 4px);box-shadow:0 0 0 2px #160d29,0 0 8px #ff936b99}
+.cassette-window .tape-reel:before{content:'';position:absolute;inset:7px;border:3px solid #72f0eb;border-radius:50%;background:conic-gradient(#fff1a8 0 12%,#3f235b 13% 28%,#fff1a8 29% 45%,#3f235b 46% 61%,#fff1a8 62% 78%,#3f235b 79% 94%,#fff1a8 95%);box-shadow:0 0 4px #4ce5e0}
+.cassette-window .tape-reel:after{content:'';position:absolute;inset:13px;border-radius:50%;background:#201337;box-shadow:0 0 0 2px #fff1a8}
+.cassette-label{position:absolute;z-index:2;left:17px;right:17px;top:72px;height:58px;padding:7px 12px 6px;background-color:#fff;background-image:linear-gradient(#222,#222),linear-gradient(#222,#222);background-position:12px 25px,12px 47px;background-size:calc(100% - 24px) 1px;background-repeat:no-repeat;border:1px solid #222;border-radius:2px;display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;gap:6px;color:#181818;box-shadow:0 2px 6px #34124255}
+.cassette-label:before{content:none}
 .cassette-label b{position:relative;z-index:1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:800 13px/1.05 'DM Sans',sans-serif;letter-spacing:.02em}.cassette-label span{position:relative;z-index:1;max-width:100%;font:600 9px/1.2 'DM Sans',sans-serif}
 .cassette-holes{position:absolute;z-index:4;left:32px;right:32px;bottom:12px;display:flex;justify-content:space-between}
 .cassette-holes i{width:8px;height:8px;border-radius:50%;background:#261641;box-shadow:inset 0 1px #9afaf4}
@@ -181,11 +176,6 @@ body,.topbar,.sidebar,.footer,.button,.playlist-cover,.track-row{transition:back
 @keyframes cassette-hover{from{transform:rotate(-6deg) translateY(4px)}to{transform:rotate(-3deg) translateY(-5px)}}
 @keyframes cassette-hover-small{from{transform:rotate(-5deg) scale(.9) translateY(2px)}to{transform:rotate(-3deg) scale(.9) translateY(-3px)}}
 @keyframes reel-spin{to{transform:rotate(360deg)}}
-@keyframes tape-travel{to{transform:translateX(70px)}}
-@keyframes tape-flow{to{background-position:24px 0}}
-@keyframes tape-path-travel{to{stroke-dashoffset:-32}}
-@keyframes supply-pack{from{transform:scale(1)}to{transform:scale(.62)}}
-@keyframes takeup-pack{from{transform:scale(.62)}to{transform:scale(1)}}
 @keyframes hologram-sweep{from{background-position:100% 0,0 0}to{background-position:-80% 0,0 0}}
 @keyframes case-float{from{transform:rotate(8deg) translateY(4px)}to{transform:rotate(5deg) translateY(-5px)}}
 @keyframes disc-spin{to{transform:rotate(360deg)}}
@@ -273,10 +263,11 @@ body,.topbar,.sidebar,.footer,.button,.playlist-cover,.track-row{transition:back
 
 /* Personalized cover note and larger cassette typography. */
 .playlist-cover.has-dedication{height:250px}
-.cover-dedication{position:absolute;z-index:4;left:28px;top:50%;width:245px;padding:17px 18px 16px;transform:translateY(-50%) rotate(-1.5deg);background:#fff9e9;color:#5e5149;border:1px solid #e2d2b3;box-shadow:0 10px 24px #2e241e2b;text-align:left}
-.cover-dedication:before{content:'';position:absolute;left:20px;right:20px;top:-7px;height:13px;background:#e9d6a8aa;transform:rotate(1deg)}
-.cover-dedication span{display:block;margin-bottom:8px;color:#9a725d;font:700 8px var(--mono);letter-spacing:.12em}
-.cover-dedication p{margin:0;font:500 15px/1.45 'DM Sans',sans-serif;overflow-wrap:anywhere}
+.cover-dedication{position:absolute;z-index:4;left:32px;top:50%;width:210px;min-height:156px;padding:27px 20px 18px;transform:translateY(-50%) rotate(-3deg);background:linear-gradient(155deg,#fff7a8 0 84%,#eee080 100%);color:#302c22;box-shadow:2px 4px 0 #cabb64,0 13px 24px #2e241e35;text-align:left}
+.cover-dedication:before{content:'';position:absolute;left:0;right:0;top:0;height:18px;background:#fffbd0aa;border-bottom:1px solid #ddcf70}
+.cover-dedication:after{content:'';position:absolute;right:0;bottom:0;border-style:solid;border-width:0 0 18px 18px;border-color:transparent transparent #d9cb6b transparent;filter:drop-shadow(-1px -1px 0 #c4b65d)}
+.cover-dedication span{display:block;margin-bottom:12px;color:#665c2b;font:800 8px var(--mono);letter-spacing:.12em}
+.cover-dedication p{margin:0;font:600 italic 15px/1.45 'DM Sans',sans-serif;overflow-wrap:anywhere}
 .playlist-cover.has-dedication .scene-small{transform:translateX(145px) scale(.68)}
 .theme-cover-mixtape.has-dedication .cassette-scene.scene-small{transform:translateX(135px) scale(.94)}
 .theme-cover-mixtape.has-dedication .cassette-art{right:28px;bottom:29px}
@@ -286,7 +277,7 @@ body,.topbar,.sidebar,.footer,.button,.playlist-cover,.track-row{transition:back
 
 @media(max-width:650px){
   .playlist-cover.has-dedication{height:310px;align-items:start}
-  .cover-dedication{left:12px;right:12px;top:auto;bottom:12px;width:auto;padding:13px 15px 12px;transform:rotate(-1deg)}
+  .cover-dedication{left:22px;right:22px;top:auto;bottom:14px;width:auto;min-height:112px;padding:25px 16px 14px;transform:rotate(-1.5deg)}
   .cover-dedication span{margin-bottom:5px}.cover-dedication p{font-size:14px;line-height:1.3}
   .playlist-cover.has-dedication .scene-small{transform:translateY(-35px) scale(.54)}
   .theme-cover-mixtape.has-dedication .cassette-scene.scene-small{transform:translateY(-35px) scale(.78)}
@@ -294,18 +285,18 @@ body,.topbar,.sidebar,.footer,.button,.playlist-cover,.track-row{transition:back
 }
 
 /* Crisp, font-independent identities for each playlist format. */
-.format-logo{display:inline-flex;align-items:center;gap:7px;color:#2d3329;font:700 11px/1 'DM Sans',sans-serif;letter-spacing:.02em;white-space:nowrap}
-.format-logo svg{display:block;width:34px;height:34px;flex:none;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
-.format-logo .logo-fill{fill:currentColor;stroke:none}
+.format-logo{display:inline-flex;align-items:center;gap:8px;color:#2d3329;font:800 12px/1 'DM Sans',sans-serif;letter-spacing:.01em;white-space:nowrap}
+.format-logo svg{display:block;width:38px;height:38px;flex:none;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.format-logo .logo-body{fill:currentColor;stroke:currentColor}.format-logo .logo-paper{fill:#fffdf0;stroke:#fffdf0}.format-logo .logo-heavy{fill:currentColor;stroke:currentColor;stroke-width:3}.format-logo .logo-light{fill:none;stroke:#fffdf0;stroke-width:2.5}
 .format-logo-mixtape{color:#873f69}.format-logo-cd-mix{color:#3f6577}.format-logo-playlist{color:#514e91}.format-logo-side-a{color:#4e6543}
-.brand>.format-logo{gap:0}.brand>.format-logo svg{width:31px;height:31px}.brand>.format-logo+span{font-family:'DM Sans',sans-serif}
+.brand>.format-logo{gap:0}.brand>.format-logo svg{width:35px;height:35px}.brand>.format-logo+span{font:800 18px/1 'DM Sans',sans-serif;letter-spacing:-.35px}
 .cover-format-logo,.art-format-logo{position:absolute;z-index:6;padding:7px 10px;border:1px solid #ffffffaa;border-radius:6px;background:#fffdf0e8;box-shadow:0 5px 15px #221b1730}
 .cover-format-logo{top:12px;right:12px}.art-format-logo{top:20px;left:20px}
-.cover-format-logo .format-logo,.art-format-logo .format-logo{font-size:10px}.cover-format-logo .format-logo svg,.art-format-logo .format-logo svg{width:26px;height:26px}
+.cover-format-logo .format-logo,.art-format-logo .format-logo{font-size:11px}.cover-format-logo .format-logo svg,.art-format-logo .format-logo svg{width:30px;height:30px}
 .theme-cover-mixtape .cover-format-logo,.theme-art-mixtape .art-format-logo{background:#fff1e6ed}.theme-cover-playlist .cover-format-logo,.theme-art-playlist .art-format-logo{background:#f5f3ffed}
 .format-picker label{align-content:start;min-height:82px;padding:10px 8px}
 .format-picker .format-logo{width:100%;flex-direction:column;justify-content:center;gap:6px;font-size:10px}
-.format-picker .format-logo svg{width:36px;height:36px}
+.format-picker .format-logo svg{width:42px;height:42px}
 
 @media(max-width:650px){
   .cover-format-logo{top:8px;right:8px;padding:5px 7px}.cover-format-logo .format-logo span{display:none}.cover-format-logo .format-logo svg{width:25px;height:25px}
