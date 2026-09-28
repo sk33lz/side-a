@@ -239,17 +239,21 @@ body,.topbar,.sidebar,.footer,.button,.playlist-cover,.track-row{transition:back
 .scene-small .queue-card{display:none}.scene-small.player-scene{height:310px}.scene-small .player-art{width:252px;height:310px;padding:17px 18px;transform:rotate(3deg);animation-name:player-float}.scene-small .player-album{width:130px;height:130px;margin:18px auto 13px;border-radius:14px;font-size:42px}.scene-small .player-controls b{width:32px;height:32px}
 
 /* Keep the cover lettering readable at the smaller share-card size. */
-.theme-cover .cassette-label{left:16px;right:16px;top:69px;height:51px;gap:4px}
-.theme-cover .cassette-label b{font-size:13px;letter-spacing:.13em}
-.theme-cover .cassette-label span{font-size:12px;font-weight:600}
-.theme-cover .cassette-brand{font-size:8px;font-weight:700;color:#54324d}
+.theme-cover-mixtape .cassette-scene.scene-small{transform:scale(.82)}
+.theme-cover-mixtape .cassette-art{right:28px;bottom:29px}
+.theme-cover .cassette-label{left:14px;right:14px;top:67px;height:56px;gap:4px;border:1px solid #9f6582}
+.theme-cover .cassette-label b{font-size:16px;line-height:1;letter-spacing:.12em}
+.theme-cover .cassette-label span{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600;line-height:1.1;color:#64344f}
+.theme-cover .cassette-brand{top:16px;font-size:10px;font-weight:700;color:#54324d}
+.theme-cover .cassette-brand span:last-child{font-size:8px}
 .theme-cover .cd-marker{font-size:17px;font-weight:600;color:#354f62}
 .theme-cover .player-top{font-size:10px;font-weight:700;color:#e2e1f5}
 .theme-cover .player-song b{font-size:14px}
 .theme-cover .player-song span{font-size:11px;color:#d0d0e0}
 .theme-cover .record-sleeve span,.theme-cover .record-sleeve i{font-size:9px;font-weight:700;text-shadow:0 1px 2px #422b26}
 .cover-label{max-width:calc(100% - 28px);padding:6px 9px;border-radius:3px;background:#171a2bd9;color:#fff!important;font-size:9px;line-height:1.3;letter-spacing:.08em;text-align:center;overflow-wrap:anywhere;z-index:2}
-@media(max-width:650px){.cover-label{bottom:9px;right:9px;font-size:8px}.theme-cover .cassette-label span{font-size:11px}}
+.theme-cover-mixtape .cover-label{top:10px;bottom:auto;left:12px;right:auto}
+@media(max-width:650px){.cover-label{bottom:9px;right:9px;font-size:8px}.theme-cover-mixtape .cassette-scene.scene-small{transform:scale(.72)}.theme-cover-mixtape .cassette-art{right:30px}.theme-cover .cassette-label span{font-size:14px}.theme-cover-mixtape .cover-label{top:8px;bottom:auto;left:8px;right:auto}}
 
 .personal-fields{display:grid;grid-template-columns:.7fr 1.3fr;gap:10px;margin-top:14px}.personal-fields label{display:grid;gap:7px}.personal-fields input{width:100%}
 .format-picker{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;border:0;padding:0;margin:19px 0 0}.format-picker legend{padding:0;margin-bottom:8px;font-size:10px;color:#77756e}.format-picker label{position:relative;display:grid;gap:6px;padding:7px;border:1px solid var(--line);border-radius:5px;cursor:pointer;text-align:center}.format-picker input{position:absolute;opacity:0;pointer-events:none}.format-picker label:has(input:checked){border-color:var(--green);box-shadow:0 0 0 1px var(--green)}.format-picker b{font-size:9px;font-weight:600}.format-swatch{height:28px;border-radius:3px}.swatch-side-a{background:radial-gradient(circle,#c77852 0 18%,#3e4338 19% 48%,#dfe5d8 49%)}.swatch-mixtape{background:linear-gradient(145deg,#f0b79e 0 38%,#7e3c68 39% 58%,#d887a7 59%)}.swatch-cd-mix{background:conic-gradient(#bfe8e8,#f2a3cb,#f4eaa2,#a6cbd8,#bfe8e8)}.swatch-playlist{background:linear-gradient(140deg,#baf07d 0 35%,#8a7cff 36% 62%,#24263b 63%)}
