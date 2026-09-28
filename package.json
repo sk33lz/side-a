@@ -1,0 +1,21 @@
+{
+  "name": "playlist-app",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": ">=22" },
+  "type": "module",
+  "scripts": {
+    "dev": "npm run db:migrate:local && npm run build && wrangler pages dev dist --port 8788",
+    "dev:vite": "vite",
+    "db:migrate:local": "wrangler d1 migrations apply side-a-playlists --local",
+    "db:migrate:remote": "wrangler d1 migrations apply side-a-playlists --remote",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name side-a-playlist",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^6.0.7",
+    "wrangler": "^4.142.0"
+  }
+}
