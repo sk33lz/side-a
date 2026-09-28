@@ -24,6 +24,7 @@ let noticeKind: 'success' | 'error' = 'success';
 let playerOpen = false;
 let playerTrackId: string | null = null;
 let playerPlaylistId: string | null = null;
+let buttonAudio: AudioContext | null = null;
 
 function isTheme(value: unknown): value is Theme { return typeof value === 'string' && themes.includes(value as Theme); }
 
@@ -118,6 +119,26 @@ function autoplayEmbed(song: Song): string | undefined {
 
 function playableSongs(playlist: Playlist): Song[] { return playlist.songs.filter(song => songEmbed(song)); }
 
+function playTapeButtonSound(): void {
+  try {
+    const AudioContextClass = window.AudioContext;
+    if (!AudioContextClass) return;
+    buttonAudio ??= new AudioContextClass();
+    if (buttonAudio.state === 'suspended') void buttonAudio.resume();
+    const now = buttonAudio.currentTime;
+    const click = buttonAudio.createOscillator();
+    const body = buttonAudio.createOscillator();
+    const gain = buttonAudio.createGain();
+    const filter = buttonAudio.createBiquadFilter();
+    click.type = 'triangle'; click.frequency.setValueAtTime(1500, now); click.frequency.exponentialRampToValueAtTime(420, now + 0.035);
+    body.type = 'sine'; body.frequency.setValueAtTime(125, now); body.frequency.exponentialRampToValueAtTime(72, now + 0.09);
+    filter.type = 'lowpass'; filter.frequency.setValueAtTime(1900, now);
+    gain.gain.setValueAtTime(0.0001, now); gain.gain.exponentialRampToValueAtTime(0.22, now + 0.004); gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+    click.connect(filter); body.connect(filter); filter.connect(gain); gain.connect(buttonAudio.destination);
+    click.start(now); body.start(now); click.stop(now + 0.04); body.stop(now + 0.11);
+  } catch { /* Sound is decorative; playback should still work if audio is unavailable. */ }
+}
+
 function currentPlaylist(): Playlist | undefined {
   return sharedPlaylist ?? (currentId ? manager.getPlaylist(currentId) : undefined);
 }
@@ -199,7 +220,7 @@ function welcomeView(): string {
 
 function playlistView(playlist: Playlist, readonly: boolean): string {
   const songs = playlist.songs;
-  const coverLabel: Record<Theme, string> = { 'side-a': 'A SIDE ORIGINAL', mixtape: 'MIXED BY YOU · 90 MIN', 'cd-mix': 'COMPACT MEMORIES · VOL. 01', playlist: 'NOW PLAYING · YOUR MIX' };
+  const coverLabel: Record<Theme, string> = { 'side-a': 'A SIDE ORIGINAL', mixtape: playlist.recipient?.trim() ? `MIXED FOR ${escapeHtml(playlist.recipient.trim())} · 90 MIN` : 'YOUR MIX · 90 MIN', 'cd-mix': 'COMPACT MEMORIES · VOL. 01', playlist: 'NOW PLAYING · YOUR MIX' };
   const description: Record<Theme, string> = { 'side-a': 'A collection of good things, gathered in one place.', mixtape: 'A little handwritten feeling, set to a favorite side.', 'cd-mix': 'A keepsake collection, ready for another spin.', playlist: 'A soundtrack for right here, right now.' };
   const cover = themeArtwork(currentTheme, true, playlist);
   const dedication = playlist.dedication?.trim() || description[currentTheme];
@@ -258,6 +279,7 @@ function startPlayer(trackId?: string): void {
   }
   playerPlaylistId = playlist.id;
   playerTrackId = queue.some(song => song.id === trackId) ? trackId! : queue[0].id;
+  playTapeButtonSound();
   if (document.querySelector('.queue-player') && playerPlaylistId === playlist.id) {
     updateQueuePlayer(playlist);
     requestAnimationFrame(() => document.querySelector<HTMLElement>('.queue-player')?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
