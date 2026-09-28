@@ -20,11 +20,11 @@ export class PlaylistManager {
   listPlaylists(): Playlist[] { return this.playlists; }
   getPlaylist(id: string): Playlist | undefined { return this.playlists.find(playlist => playlist.id === id); }
 
-  createPlaylist(name: string, theme: PlaylistTheme = 'mixtape', recipient = '', dedication = ''): Playlist {
+  createPlaylist(name: string, theme: PlaylistTheme = 'mixtape', recipient = '', dedication = '', sender = ''): Playlist {
     const cleanName = name.trim();
     if (!cleanName) throw new Error('Give your playlist a name first.');
     if (cleanName.length > 60) throw new Error('Playlist names can be up to 60 characters.');
-    const playlist: Playlist = { id: createId(), name: cleanName, songs: [], createdAt: new Date().toISOString(), theme, recipient: recipient.trim().slice(0, 40), dedication: dedication.trim().slice(0, 140) };
+    const playlist: Playlist = { id: createId(), name: cleanName, songs: [], createdAt: new Date().toISOString(), theme, recipient: recipient.trim().slice(0, 40), sender: sender.trim().slice(0, 40), dedication: dedication.trim().slice(0, 140) };
     this.playlists.unshift(playlist); this.save(); return playlist;
   }
 
@@ -32,9 +32,10 @@ export class PlaylistManager {
 
   updateTheme(playlistId: string, theme: PlaylistTheme): void { this.requirePlaylist(playlistId).theme = theme; this.save(); }
 
-  updateDetails(playlistId: string, recipient: string, dedication: string): void {
+  updateDetails(playlistId: string, recipient: string, dedication: string, sender = ''): void {
     const playlist = this.requirePlaylist(playlistId);
     playlist.recipient = recipient.trim().slice(0, 40);
+    playlist.sender = sender.trim().slice(0, 40);
     playlist.dedication = dedication.trim().slice(0, 140);
     this.save();
   }

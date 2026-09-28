@@ -19,6 +19,7 @@ export interface Playlist {
   createdAt: string;
   theme?: PlaylistTheme;
   recipient?: string;
+  sender?: string;
   dedication?: string;
 }
 

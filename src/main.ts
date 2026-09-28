@@ -43,7 +43,7 @@ async function readSharedPlaylist(): Promise<Playlist | null> {
       if (!result || typeof result !== 'object') return null;
       const playlist = (result as { playlist?: Partial<Playlist> }).playlist;
       if (!playlist || typeof playlist.name !== 'string' || !Array.isArray(playlist.songs) || !playlist.songs.every(isSong)) return null;
-      return { id: 'shared', name: playlist.name, songs: playlist.songs, createdAt: playlist.createdAt ?? new Date().toISOString(), theme: isTheme(playlist.theme) ? playlist.theme : 'mixtape', recipient: typeof playlist.recipient === 'string' ? playlist.recipient : '', dedication: typeof playlist.dedication === 'string' ? playlist.dedication : '' };
+      return { id: 'shared', name: playlist.name, songs: playlist.songs, createdAt: playlist.createdAt ?? new Date().toISOString(), theme: isTheme(playlist.theme) ? playlist.theme : 'mixtape', recipient: typeof playlist.recipient === 'string' ? playlist.recipient : '', sender: typeof playlist.sender === 'string' ? playlist.sender : '', dedication: typeof playlist.dedication === 'string' ? playlist.dedication : '' };
     } catch { return null; }
   }
   const encoded = hash.get('playlist');
@@ -68,7 +68,7 @@ async function readSharedPlaylist(): Promise<Playlist | null> {
     if (!parsed || typeof parsed !== 'object') return null;
     const data = parsed as Partial<Playlist>;
     if (typeof data.name !== 'string' || !Array.isArray(data.songs) || !data.songs.every(isSong)) return null;
-    return { id: 'shared', name: data.name, songs: data.songs, createdAt: data.createdAt ?? new Date().toISOString(), theme: isTheme(data.theme) ? data.theme : 'mixtape', recipient: typeof data.recipient === 'string' ? data.recipient : '', dedication: typeof data.dedication === 'string' ? data.dedication : '' };
+    return { id: 'shared', name: data.name, songs: data.songs, createdAt: data.createdAt ?? new Date().toISOString(), theme: isTheme(data.theme) ? data.theme : 'mixtape', recipient: typeof data.recipient === 'string' ? data.recipient : '', sender: typeof data.sender === 'string' ? data.sender : '', dedication: typeof data.dedication === 'string' ? data.dedication : '' };
   } catch { return null; }
 }
 
@@ -157,7 +157,7 @@ async function syncCurrentShare(): Promise<boolean> {
   shareSyncQueue = shareSyncQueue.then(async () => {
     const response = await fetch(`/api/playlists/${encodeURIComponent(keys.id)}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${keys.token}` },
-      body: JSON.stringify({ playlist: { name: playlist.name, songs: playlist.songs, createdAt: playlist.createdAt, theme: playlist.theme ?? 'mixtape', recipient: playlist.recipient ?? '', dedication: playlist.dedication ?? '' } }),
+      body: JSON.stringify({ playlist: { name: playlist.name, songs: playlist.songs, createdAt: playlist.createdAt, theme: playlist.theme ?? 'mixtape', recipient: playlist.recipient ?? '', sender: playlist.sender ?? '', dedication: playlist.dedication ?? '' } }),
     });
     if (!response.ok) throw new Error('Could not update the shared playlist.');
   }).catch(() => {
@@ -192,7 +192,7 @@ function render(): void {
         </section>
       </main>
       <footer class="footer"><span>Music links, all in one place.</span><span>Made for sharing <span class="heart">♥</span></span></footer>
-      <dialog id="create-dialog" class="dialog"><form id="create-form"><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">START A COLLECTION</span><h2>Make something for someone.</h2><p>Name the mix, personalize it, then choose the format that fits its feeling.</p><label for="playlist-name">Mix name</label><input id="playlist-name" name="name" maxlength="60" placeholder="Sunday morning, road trip…" required autofocus><div class="personal-fields"><label>Made for<input name="recipient" maxlength="40" placeholder="Their name"></label><label>Short dedication<input name="dedication" maxlength="140" placeholder="A few words just for them"></label></div><fieldset class="format-picker"><legend>Choose a format</legend>${themes.map(theme => `<label><input type="radio" name="theme" value="${theme}" ${currentTheme === theme ? 'checked' : ''}><span class="format-swatch swatch-${theme}"></span><b>${themeLabels[theme]}</b></label>`).join('')}</fieldset><div class="dialog-actions"><button type="button" class="button button-quiet" data-close>Cancel</button><button class="button button-dark" type="submit">Create mix <span>→</span></button></div></form></dialog>
+      <dialog id="create-dialog" class="dialog"><form id="create-form"><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">START A COLLECTION</span><h2>Make something for someone.</h2><p>Name the mix, personalize it, then choose the format that fits its feeling.</p><label for="playlist-name">Mix name</label><input id="playlist-name" name="name" maxlength="60" placeholder="Sunday morning, road trip…" required autofocus><div class="personal-fields"><label>Made for<input name="recipient" maxlength="40" placeholder="Their name"></label><label>Made by<input name="sender" maxlength="40" placeholder="Your name"></label><label class="dedication-field">Short dedication<input name="dedication" maxlength="140" placeholder="A few words just for them"></label></div><fieldset class="format-picker"><legend>Choose a format</legend>${themes.map(theme => `<label><input type="radio" name="theme" value="${theme}" ${currentTheme === theme ? 'checked' : ''}><span class="format-swatch swatch-${theme}"></span><b>${themeLabels[theme]}</b></label>`).join('')}</fieldset><div class="dialog-actions"><button type="button" class="button button-quiet" data-close>Cancel</button><button class="button button-dark" type="submit">Create mix <span>→</span></button></div></form></dialog>
       <dialog id="add-dialog" class="dialog"><form id="add-form"><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">ADD TO YOUR PLAYLIST</span><h2>Bring a track along.</h2><p>Paste one link or a whole list, with one URL on each line.</p><label for="song-urls">Track links</label><textarea id="song-urls" name="urls" rows="6" placeholder="https://open.spotify.com/track/…&#10;https://youtu.be/…" required></textarea><span class="field-hint">YouTube · Spotify · SoundCloud · Apple Music · Tidal</span><div class="dialog-actions"><button type="button" class="button button-quiet" data-close>Cancel</button><button class="button button-dark" type="submit">Add tracks <span>→</span></button></div></form></dialog>
       <input type="file" id="import-file" accept="application/json,.json" hidden>
     </div>`;
@@ -201,10 +201,14 @@ function render(): void {
 
 function themeArtwork(theme: Theme, cover = false, playlist?: Playlist): string {
   const recipient = escapeHtml(playlist?.recipient?.trim() || 'you');
-  if (theme === 'mixtape') return `<div class="cassette-scene ${cover ? 'scene-small' : ''}" aria-hidden="true"><div class="j-card"><span>FOR:</span><b>${recipient}</b><i>01 ________</i><i>02 ________</i><i>03 ________</i><em>play loud</em></div><div class="cassette-art ${cover ? 'cassette-small' : ''}"><div class="cassette-screw screw-a"></div><div class="cassette-screw screw-b"></div><div class="cassette-window"><i></i><i></i><span></span></div><div class="cassette-label"><b>MIXTAPE</b><span>made for ${recipient}</span></div><div class="cassette-holes"><i></i><i></i><i></i><i></i></div><div class="cassette-brand"><span>SIDE A</span><span>90 MIN</span></div></div></div>`;
-  if (theme === 'cd-mix') return `<div class="cd-scene ${cover ? 'scene-small' : ''}" aria-hidden="true"><div class="cd-booklet"><b>${recipient}'s mix</b><span>01 play it again</span><span>02 windows down</span><span>03 all the way home</span></div><div class="cd-case ${cover ? 'cd-small' : ''}"><div class="cd-disc"><div class="cd-marker">for ${recipient}</div><div class="cd-hub"><span>CD<br>MIX</span></div><div class="cd-shine"></div></div><div class="cd-sticker">VOL. 01</div><div class="cd-track-lines"><i></i><i></i><i></i></div></div></div>`;
-  if (theme === 'playlist') return `<div class="player-scene ${cover ? 'scene-small' : ''}" aria-hidden="true"><div class="queue-card queue-one"><span>UP NEXT</span><b>02</b></div><div class="queue-card queue-two"><span>IN THE MIX</span><b>03</b></div><div class="player-art ${cover ? 'player-small' : ''}"><div class="player-top"><span>FOR ${recipient.toUpperCase()}</span><b>•••</b></div><div class="player-album"><span>♫</span></div><div class="player-song"><b>${recipient}'s next favorite</b><span>a mix for right now</span></div><div class="player-progress"><i></i></div><div class="player-bars">${'<i></i>'.repeat(13)}</div><div class="player-controls"><span>↶</span><b>▶</b><span>↷</span></div></div></div>`;
-  return `<div class="record-scene ${cover ? 'scene-small' : ''}" aria-hidden="true"><div class="record-sleeve"><span>SIDE A · FOR ${recipient}</span><b>songs worth<br>sharing</b><i>33⅓ RPM</i></div><div class="art-disc"><div class="disc-label"><span>${recipient}</span><b>♥</b></div></div><div class="tonearm"><i></i></div></div><div class="art-note note-one"><span>♫</span> good things take time</div><div class="art-note note-two">your mix, your people <span>↗</span></div><span class="art-spark spark-one">✳</span><span class="art-spark spark-two">✳</span><div class="art-caption">PLAY IT YOUR WAY <span>— No. 001</span></div>`;
+  const sender = escapeHtml(playlist?.sender?.trim() || '');
+  const title = escapeHtml(playlist?.name?.trim() || themeLabels[theme]);
+  const format = theme === 'side-a' ? 'record' : theme === 'cd-mix' ? 'CD mix' : theme === 'playlist' ? 'playlist' : 'mixtape';
+  const byline = playlist ? `A ${format}${playlist.recipient?.trim() ? ` made for ${recipient}` : ''}${playlist.sender?.trim() ? ` by ${sender}` : ''}` : `A ${format} made for ${recipient}`;
+  if (theme === 'mixtape') return `<div class="cassette-scene ${cover ? 'scene-small' : ''}" aria-hidden="true"><div class="j-card"><span>FOR:</span><b>${recipient}</b><i>01 ________</i><i>02 ________</i><i>03 ________</i><em>play loud</em></div><div class="cassette-art ${cover ? 'cassette-small' : ''}"><div class="cassette-screw screw-a"></div><div class="cassette-screw screw-b"></div><div class="cassette-window"><i></i><i></i><span></span></div><div class="cassette-label"><b>${title}</b><span>${byline}</span></div><div class="cassette-holes"><i></i><i></i><i></i><i></i></div><div class="cassette-brand"><span>SIDE A</span><span>90 MIN</span></div></div></div>`;
+  if (theme === 'cd-mix') return `<div class="cd-scene ${cover ? 'scene-small' : ''}" aria-hidden="true"><div class="cd-booklet"><b>${title}</b><span>${byline}</span><span>01 play it again</span><span>02 all the way home</span></div><div class="cd-case ${cover ? 'cd-small' : ''}"><div class="cd-disc"><div class="cd-marker"><b>${title}</b><span>${byline}</span></div><div class="cd-hub"><span>CD<br>MIX</span></div><div class="cd-shine"></div></div><div class="cd-sticker">VOL. 01</div><div class="cd-track-lines"><i></i><i></i><i></i></div></div></div>`;
+  if (theme === 'playlist') return `<div class="player-scene ${cover ? 'scene-small' : ''}" aria-hidden="true"><div class="queue-card queue-one"><span>UP NEXT</span><b>02</b></div><div class="queue-card queue-two"><span>IN THE MIX</span><b>03</b></div><div class="player-art ${cover ? 'player-small' : ''}"><div class="player-top"><span>FOR ${recipient.toUpperCase()}</span><b>•••</b></div><div class="player-album"><span>♫</span></div><div class="player-song"><b>${title}</b><span>${byline}</span></div><div class="player-progress"><i></i></div><div class="player-bars">${'<i></i>'.repeat(13)}</div><div class="player-controls"><span>↶</span><b>▶</b><span>↷</span></div></div></div>`;
+  return `<div class="record-scene ${cover ? 'scene-small' : ''}" aria-hidden="true"><div class="record-sleeve"><span>${byline}</span><b>${title}</b><i>33⅓ RPM</i></div><div class="art-disc"><div class="disc-label"><span>${recipient}</span><b>♥</b></div></div><div class="tonearm"><i></i></div></div><div class="art-note note-one"><span>♫</span> good things take time</div><div class="art-note note-two">your mix, your people <span>↗</span></div><span class="art-spark spark-one">✳</span><span class="art-spark spark-two">✳</span><div class="art-caption">PLAY IT YOUR WAY <span>— No. 001</span></div>`;
 }
 
 function welcomeView(): string {
@@ -231,9 +235,9 @@ function playlistView(playlist: Playlist, readonly: boolean): string {
     <div class="playlist-heading">
       <div class="playlist-heading-top"><span class="eyebrow">${readonly ? 'SHARED WITH YOU' : 'YOUR COLLECTION'}</span><div class="heading-actions">${!readonly ? `<button class="button button-outline" id="export-playlist">↓ <span>Export</span></button><button class="button button-outline" id="share-playlist">↗ <span>Copy live link</span></button><button class="button button-outline danger-button" id="delete-playlist" aria-label="Delete playlist">× <span>Delete</span></button>` : ''}</div></div>
       <h1>${escapeHtml(playlist.name)}</h1>
-      <p class="playlist-meta"><span class="avatar tiny">${readonly ? '♥' : 's'}</span> ${playlist.recipient ? `Made for <strong>${escapeHtml(playlist.recipient)}</strong>` : readonly ? 'Shared by someone' : 'Your collection'} <span class="meta-separator">·</span> ${songs.length} ${songs.length === 1 ? 'track' : 'tracks'}</p>
+      <p class="playlist-meta"><span class="avatar tiny">${readonly ? '♥' : 's'}</span> ${playlist.recipient ? `Made for <strong>${escapeHtml(playlist.recipient)}</strong>` : readonly ? 'Shared by someone' : 'Your collection'}${playlist.sender ? ` by <strong>${escapeHtml(playlist.sender)}</strong>` : ''} <span class="meta-separator">·</span> ${songs.length} ${songs.length === 1 ? 'track' : 'tracks'}</p>
       <p class="playlist-description">${escapeHtml(dedication)}</p>
-      ${!readonly ? `<div class="personalize-mix"><label>Made for<input id="recipient-name" maxlength="40" value="${escapeHtml(playlist.recipient ?? '')}" placeholder="Add their name"></label><label>Dedication<input id="playlist-dedication" maxlength="140" value="${escapeHtml(playlist.dedication ?? '')}" placeholder="Write a few words"></label><span>Saved automatically</span></div>` : ''}
+      ${!readonly ? `<div class="personalize-mix"><label>Made for<input id="recipient-name" maxlength="40" value="${escapeHtml(playlist.recipient ?? '')}" placeholder="Add their name"></label><label>Made by<input id="sender-name" maxlength="40" value="${escapeHtml(playlist.sender ?? '')}" placeholder="Add your name"></label><label class="dedication-field">Dedication<input id="playlist-dedication" maxlength="140" value="${escapeHtml(playlist.dedication ?? '')}" placeholder="Write a few words"></label><span>Saved automatically</span></div>` : ''}
       <div class="playlist-main-actions">${listenButton}${!readonly ? `<button class="button button-dark" id="add-track">＋ <span>Add tracks</span></button><button class="button button-quiet" id="sort-playlist">↕ <span>Sort A–Z</span></button><button class="button button-quiet" id="import-trigger">↑ <span>Import file</span></button>` : ''}</div>
     </div>
     ${playerOpen && playerPlaylistId === playlist.id ? queuePlayer(playlist) : ''}
@@ -384,16 +388,17 @@ function bindEvents(): void {
     event.preventDefault(); const data = new FormData(event.currentTarget as HTMLFormElement);
     try {
       const selectedTheme = isTheme(data.get('theme')) ? data.get('theme') as Theme : currentTheme;
-      const playlist = manager.createPlaylist(String(data.get('name') ?? ''), selectedTheme, String(data.get('recipient') ?? ''), String(data.get('dedication') ?? ''));
+      const playlist = manager.createPlaylist(String(data.get('name') ?? ''), selectedTheme, String(data.get('recipient') ?? ''), String(data.get('dedication') ?? ''), String(data.get('sender') ?? ''));
       currentTheme = selectedTheme; currentId = playlist.id; notice = 'Mix created. Add the first track when you’re ready.'; (document.querySelector<HTMLDialogElement>('#create-dialog')!).close(); render();
     }
     catch (error) { showError(error); }
   });
   const recipientInput = app.querySelector<HTMLInputElement>('#recipient-name');
+  const senderInput = app.querySelector<HTMLInputElement>('#sender-name');
   const dedicationInput = app.querySelector<HTMLInputElement>('#playlist-dedication');
-  [recipientInput, dedicationInput].forEach(input => input?.addEventListener('change', () => {
+  [recipientInput, senderInput, dedicationInput].forEach(input => input?.addEventListener('change', () => {
     if (!currentId || sharedPlaylist) return;
-    manager.updateDetails(currentId, recipientInput?.value ?? '', dedicationInput?.value ?? '');
+    manager.updateDetails(currentId, recipientInput?.value ?? '', dedicationInput?.value ?? '', senderInput?.value ?? '');
     notice = 'Personalization updated.'; void syncCurrentShare(); render();
   }));
   app.querySelector<HTMLFormElement>('#add-form')?.addEventListener('submit', async event => {
@@ -452,7 +457,7 @@ async function sharePlaylist(): Promise<void> {
     if (!credentials) {
       const response = await fetch('/api/playlists', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playlist: { name: playlist.name, songs: playlist.songs, createdAt: playlist.createdAt, theme: playlist.theme ?? 'mixtape', recipient: playlist.recipient ?? '', dedication: playlist.dedication ?? '' } }),
+        body: JSON.stringify({ playlist: { name: playlist.name, songs: playlist.songs, createdAt: playlist.createdAt, theme: playlist.theme ?? 'mixtape', recipient: playlist.recipient ?? '', sender: playlist.sender ?? '', dedication: playlist.dedication ?? '' } }),
       });
       const result = await response.json() as { id?: string; editToken?: string; error?: string };
       if (!response.ok || !result.id || !result.editToken) throw new Error(result.error ?? 'Cloud sharing is not available.');
@@ -480,7 +485,7 @@ async function sharePlaylist(): Promise<void> {
 
 function saveShared(): void {
   if (!sharedPlaylist) return;
-  const copy = manager.createPlaylist(sharedPlaylist.name, sharedPlaylist.theme ?? 'mixtape', sharedPlaylist.recipient ?? '', sharedPlaylist.dedication ?? '');
+  const copy = manager.createPlaylist(sharedPlaylist.name, sharedPlaylist.theme ?? 'mixtape', sharedPlaylist.recipient ?? '', sharedPlaylist.dedication ?? '', sharedPlaylist.sender ?? '');
   sharedPlaylist.songs.forEach(song => manager.addSong(copy.id, { ...song, id: createId() }));
   currentId = copy.id; sharedPlaylist = null; history.replaceState(null, '', location.pathname + location.search); notice = 'Saved your own copy. You can now edit and share it.'; render();
 }
@@ -509,7 +514,7 @@ async function importPlaylist(event: Event): Promise<void> {
     const root = parsed as { playlist?: Partial<Playlist>; format?: string };
     const data = (root.format === 'side-a-playlist' ? root.playlist : parsed) as Partial<Playlist>;
     if (typeof data.name !== 'string' || !Array.isArray(data.songs) || !data.songs.every(isSong)) throw new Error('This file does not contain a valid playlist.');
-    const playlist = manager.createPlaylist(data.name, isTheme(data.theme) ? data.theme : 'mixtape', typeof data.recipient === 'string' ? data.recipient : '', typeof data.dedication === 'string' ? data.dedication : '');
+    const playlist = manager.createPlaylist(data.name, isTheme(data.theme) ? data.theme : 'mixtape', typeof data.recipient === 'string' ? data.recipient : '', typeof data.dedication === 'string' ? data.dedication : '', typeof data.sender === 'string' ? data.sender : '');
     data.songs.forEach(song => manager.addSong(playlist.id, { ...song, id: createId() }));
     currentId = playlist.id; sharedPlaylist = null; notice = `Imported “${playlist.name}” with ${playlist.songs.length} tracks.`; render();
   } catch (error) { showError(error); }
