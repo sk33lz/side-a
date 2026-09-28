@@ -7,7 +7,7 @@
     {
       "binding": "DB",
       "database_name": "side-a-playlists",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "0c408855-7fa8-4388-829f-423eeacd345a",
       "migrations_dir": "migrations"
     }
   ]

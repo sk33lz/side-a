@@ -1,4 +1,5 @@
 export type SongSource = 'YouTube' | 'Spotify' | 'SoundCloud' | 'Apple Music' | 'Tidal';
+export type PlaylistTheme = 'side-a' | 'mixtape' | 'cd-mix' | 'playlist';
 
 export interface Song {
   id: string;
@@ -16,6 +17,9 @@ export interface Playlist {
   name: string;
   songs: Song[];
   createdAt: string;
+  theme?: PlaylistTheme;
+  recipient?: string;
+  dedication?: string;
 }
 
 export interface SharedPlaylist {

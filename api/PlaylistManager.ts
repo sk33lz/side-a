@@ -1,4 +1,4 @@
-import type { Playlist, Song } from './models';
+import type { Playlist, PlaylistTheme, Song } from './models';
 
 const STORAGE_KEY = 'side-a.playlists.v1';
 const createId = (): string => typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -8,7 +8,10 @@ function readPlaylists(): Playlist[] {
     const value: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
     if (!Array.isArray(value)) return [];
     return value.filter((item): item is Playlist => item && typeof item.id === 'string' &&
-      typeof item.name === 'string' && Array.isArray(item.songs));
+      typeof item.name === 'string' && Array.isArray(item.songs)).map(item => ({
+        ...item,
+        theme: ['side-a', 'mixtape', 'cd-mix', 'playlist'].includes(item.theme ?? '') ? item.theme : 'mixtape',
+      }));
   } catch { return []; }
 }
 
@@ -17,15 +20,24 @@ export class PlaylistManager {
   listPlaylists(): Playlist[] { return this.playlists; }
   getPlaylist(id: string): Playlist | undefined { return this.playlists.find(playlist => playlist.id === id); }
 
-  createPlaylist(name: string): Playlist {
+  createPlaylist(name: string, theme: PlaylistTheme = 'mixtape', recipient = '', dedication = ''): Playlist {
     const cleanName = name.trim();
     if (!cleanName) throw new Error('Give your playlist a name first.');
     if (cleanName.length > 60) throw new Error('Playlist names can be up to 60 characters.');
-    const playlist: Playlist = { id: createId(), name: cleanName, songs: [], createdAt: new Date().toISOString() };
+    const playlist: Playlist = { id: createId(), name: cleanName, songs: [], createdAt: new Date().toISOString(), theme, recipient: recipient.trim().slice(0, 40), dedication: dedication.trim().slice(0, 140) };
     this.playlists.unshift(playlist); this.save(); return playlist;
   }
 
   addSong(playlistId: string, song: Song): void { this.requirePlaylist(playlistId).songs.push(song); this.save(); }
+
+  updateTheme(playlistId: string, theme: PlaylistTheme): void { this.requirePlaylist(playlistId).theme = theme; this.save(); }
+
+  updateDetails(playlistId: string, recipient: string, dedication: string): void {
+    const playlist = this.requirePlaylist(playlistId);
+    playlist.recipient = recipient.trim().slice(0, 40);
+    playlist.dedication = dedication.trim().slice(0, 140);
+    this.save();
+  }
 
   updateSong(playlistId: string, songId: string, updates: Pick<Song, 'title' | 'artist'>): void {
     const song = this.requirePlaylist(playlistId).songs.find(item => item.id === songId);
@@ -43,6 +55,16 @@ export class PlaylistManager {
     const to = from + offset;
     if (from < 0 || to < 0 || to >= songs.length) return;
     [songs[from], songs[to]] = [songs[to], songs[from]];
+    this.save();
+  }
+
+  moveSongTo(playlistId: string, songId: string, targetId: string): void {
+    const songs = this.requirePlaylist(playlistId).songs;
+    const from = songs.findIndex(song => song.id === songId);
+    const target = songs.findIndex(song => song.id === targetId);
+    if (from < 0 || target < 0 || from === target) return;
+    const [song] = songs.splice(from, 1);
+    songs.splice(target, 0, song);
     this.save();
   }
 
