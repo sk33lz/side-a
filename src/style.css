@@ -18,9 +18,12 @@
 .cassette-art:before{content:'';position:absolute;inset:8px;border:1px solid #7b456544;border-radius:8px}
 .cassette-screw{position:absolute;top:15px;width:6px;height:6px;border-radius:50%;background:#79506c;box-shadow:inset 0 1px 1px #ffffff80}
 .screw-a{left:17px}.screw-b{right:17px}
-.cassette-window{position:absolute;left:50%;top:18px;transform:translateX(-50%);width:136px;height:47px;border:5px solid #895471;border-radius:8px;background:linear-gradient(90deg,#4f3458,#302941 48%,#563452);display:flex;align-items:center;justify-content:space-around;box-shadow:inset 0 0 10px #1d172c}
-.cassette-window i{width:27px;height:27px;border:4px dotted #e8c2c2;border-radius:50%;background:#57405e;box-shadow:0 0 0 3px #30243c}
-.cassette-window span{position:absolute;width:47px;height:12px;border-top:3px solid #e3a8c0;border-bottom:3px solid #e3a8c0}
+.cassette-window{position:absolute;left:50%;top:18px;transform:translateX(-50%);width:136px;height:47px;border:5px solid #895471;border-radius:8px;background:linear-gradient(90deg,#4f3458,#302941 48%,#563452);display:flex;align-items:center;justify-content:space-around;box-shadow:inset 0 0 10px #1d172c;overflow:hidden}
+.cassette-window .tape-reel{position:relative;z-index:2;width:29px;height:29px;border:4px solid #e8c2c2;border-radius:50%;background:conic-gradient(from 15deg,#3b263e 0 8%,#e4b8bd 9% 14%,#49304d 15% 28%,#e4b8bd 29% 34%,#49304d 35% 48%,#e4b8bd 49% 54%,#49304d 55% 68%,#e4b8bd 69% 74%,#49304d 75% 88%,#e4b8bd 89% 94%,#3b263e 95%);box-shadow:0 0 0 3px #30243c,inset 0 0 0 4px #604560}
+.cassette-window .tape-reel:before{content:'';position:absolute;inset:7px;border-radius:50%;background:#e9caca;box-shadow:inset 0 0 0 2px #5b3a58}
+.tape-ribbon{position:absolute;z-index:1;left:18px;right:18px;top:14px;height:12px;background:repeating-linear-gradient(90deg,#21131d 0 7px,#402331 8px 12px);background-size:24px 100%;box-shadow:0 1px 2px #0008;animation:tape-flow .45s linear infinite}
+.tape-ribbon:after{content:'';position:absolute;left:15px;right:15px;top:8px;height:15px;border-bottom:3px solid #24151f;border-radius:0 0 50% 50%;filter:drop-shadow(0 1px #74435b)}
+.tape-ribbon span{position:absolute;left:50%;top:2px;width:22px;height:8px;transform:translateX(-50%);border-top:2px solid #d996ad;border-bottom:2px solid #d996ad;background:#392232}
 .cassette-label{position:absolute;left:21px;right:21px;top:76px;height:48px;background:#f5e8cf;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;color:#814d68;transform:rotate(1deg);box-shadow:0 2px 4px #4d2a4a33}
 .cassette-label b{font:700 11px var(--mono);letter-spacing:.2em}.cassette-label span{font:italic 10px var(--serif)}
 .cassette-holes{position:absolute;left:32px;right:32px;bottom:12px;display:flex;justify-content:space-between}
@@ -140,11 +143,8 @@ body,.topbar,.sidebar,.footer,.button,.playlist-cover,.track-row{transition:back
 .theme-art-mixtape{background-image:radial-gradient(circle at 18% 16%,#ffb3d032 0 2px,transparent 3px),radial-gradient(circle at 80% 78%,#ffd78e24 0 1px,transparent 2px),radial-gradient(ellipse at 50% 48%,#984d7d 0,#5b284f 60%,#42213f 100%);background-size:37px 37px,23px 23px,100% 100%}
 .cassette-art{animation:none;transition:filter .3s ease,transform .3s ease}
 .art-card:hover .cassette-art{filter:saturate(1.12) brightness(1.04)}
-.cassette-window i{position:relative;animation:reel-spin 4.6s linear infinite}
-.cassette-window i:nth-child(2){animation-duration:3.7s}
-.cassette-window i:after{content:'';position:absolute;inset:6px;border:2px solid #f4d6cc;border-radius:50%;opacity:.65}
-.cassette-window span{overflow:hidden}
-.cassette-window span:after{content:'';position:absolute;top:2px;left:8px;width:28px;height:2px;background:#fff3d9;box-shadow:0 5px #fff3d9;opacity:.65}
+.cassette-window .tape-reel{animation:reel-spin 2.8s linear infinite}
+.cassette-window .reel-right{animation-duration:2.15s}
 .cassette-label:after{content:'♥';position:absolute;right:11px;bottom:6px;color:#d05e8c;font-size:10px;transform:rotate(9deg)}
 .theme-cover-mixtape .cassette-art{animation:none}
 
@@ -179,6 +179,7 @@ body,.topbar,.sidebar,.footer,.button,.playlist-cover,.track-row{transition:back
 @keyframes cassette-hover-small{from{transform:rotate(-5deg) scale(.9) translateY(2px)}to{transform:rotate(-3deg) scale(.9) translateY(-3px)}}
 @keyframes reel-spin{to{transform:rotate(360deg)}}
 @keyframes tape-travel{to{transform:translateX(70px)}}
+@keyframes tape-flow{to{background-position:24px 0}}
 @keyframes hologram-sweep{from{background-position:100% 0,0 0}to{background-position:-80% 0,0 0}}
 @keyframes case-float{from{transform:rotate(8deg) translateY(4px)}to{transform:rotate(5deg) translateY(-5px)}}
 @keyframes disc-spin{to{transform:rotate(360deg)}}
