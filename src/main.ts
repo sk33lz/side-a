@@ -9,6 +9,8 @@ const createId = (): string => typeof crypto.randomUUID === 'function' ? crypto.
 let currentId: string | null = null;
 let sharedPlaylist: Playlist | null = null;
 const SHARE_KEYS = 'side-a.share-keys.v1';
+const SHARED_ORDER_KEY = 'side-a.shared-order.v1';
+const VOTER_KEY = 'side-a.voter.v1';
 const THEME_KEY = 'side-a.theme.v1';
 const themes = ['side-a', 'mixtape', 'cd-mix', 'playlist'] as const;
 type Theme = PlaylistTheme;
@@ -25,6 +27,10 @@ let playerOpen = false;
 let playerTrackId: string | null = null;
 let playerPlaylistId: string | null = null;
 let buttonAudio: AudioContext | null = null;
+let currentShareId: string | null = null;
+let senderOrder: string[] = [];
+type ReactionSummary = { likes: number; dislikes: number; mine: -1 | 0 | 1 };
+let reactions: Record<string, ReactionSummary> = {};
 
 function isTheme(value: unknown): value is Theme { return typeof value === 'string' && themes.includes(value as Theme); }
 
@@ -32,18 +38,67 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
 }
 
+function voterId(): string {
+  try {
+    const saved = localStorage.getItem(VOTER_KEY);
+    if (saved) return saved;
+    const value = createId(); localStorage.setItem(VOTER_KEY, value); return value;
+  } catch { return createId(); }
+}
+
+function applySharedOrder(playlist: Playlist, shareId: string): Playlist {
+  try {
+    const orders = JSON.parse(localStorage.getItem(SHARED_ORDER_KEY) ?? '{}') as Record<string, string[]>;
+    const order = orders[shareId];
+    if (!Array.isArray(order)) return playlist;
+    const positions = new Map(order.map((id, index) => [id, index]));
+    playlist.songs.sort((a, b) => (positions.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (positions.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+  } catch { /* Keep the sender's order if local preferences cannot be read. */ }
+  return playlist;
+}
+
+function saveSharedOrder(): void {
+  if (!sharedPlaylist || !currentShareId) return;
+  try {
+    const orders = JSON.parse(localStorage.getItem(SHARED_ORDER_KEY) ?? '{}') as Record<string, string[]>;
+    orders[currentShareId] = sharedPlaylist.songs.map(song => song.id);
+    localStorage.setItem(SHARED_ORDER_KEY, JSON.stringify(orders));
+  } catch { /* The reordered view still lasts until the page is refreshed. */ }
+}
+
+async function loadReactions(shareId: string): Promise<void> {
+  try {
+    const response = await fetch(`/api/playlists/${encodeURIComponent(shareId)}/reactions?voter=${encodeURIComponent(voterId())}`);
+    if (!response.ok) return;
+    const result = await response.json() as { reactions?: Array<{ song_id: string; likes: number; dislikes: number; mine: number }> };
+    reactions = Object.fromEntries((result.reactions ?? []).map(item => [item.song_id, {
+      likes: Number(item.likes) || 0, dislikes: Number(item.dislikes) || 0, mine: item.mine === 1 ? 1 : item.mine === -1 ? -1 : 0,
+    }]));
+    render();
+  } catch { /* Reactions are supplementary; keep the playlist usable offline. */ }
+}
+
+function loadOwnerReactions(playlistId: string): void {
+  const shareId = shareKeys()[playlistId]?.id;
+  reactions = {};
+  if (shareId) void loadReactions(shareId);
+}
+
 async function readSharedPlaylist(): Promise<Playlist | null> {
   const hash = new URLSearchParams(location.hash.slice(1));
   const shareId = hash.get('share');
   if (shareId) {
     try {
+      currentShareId = shareId;
       const response = await fetch(`/api/playlists/${encodeURIComponent(shareId)}`);
       if (!response.ok) return null;
       const result: unknown = await response.json();
       if (!result || typeof result !== 'object') return null;
       const playlist = (result as { playlist?: Partial<Playlist> }).playlist;
       if (!playlist || typeof playlist.name !== 'string' || !Array.isArray(playlist.songs) || !playlist.songs.every(isSong)) return null;
-      return { id: 'shared', name: playlist.name, songs: playlist.songs, createdAt: playlist.createdAt ?? new Date().toISOString(), theme: isTheme(playlist.theme) ? playlist.theme : 'mixtape', recipient: typeof playlist.recipient === 'string' ? playlist.recipient : '', sender: typeof playlist.sender === 'string' ? playlist.sender : '', dedication: typeof playlist.dedication === 'string' ? playlist.dedication : '' };
+      const shared = { id: 'shared', name: playlist.name, songs: playlist.songs, createdAt: playlist.createdAt ?? new Date().toISOString(), theme: isTheme(playlist.theme) ? playlist.theme : 'mixtape', recipient: typeof playlist.recipient === 'string' ? playlist.recipient : '', sender: typeof playlist.sender === 'string' ? playlist.sender : '', dedication: typeof playlist.dedication === 'string' ? playlist.dedication : '' } satisfies Playlist;
+      senderOrder = shared.songs.map(song => song.id);
+      return applySharedOrder(shared, shareId);
     } catch { return null; }
   }
   const encoded = hash.get('playlist');
@@ -187,7 +242,7 @@ function render(): void {
         </aside>
         <section class="content" id="main-content" tabindex="-1">
           ${notice ? `<div class="toast ${noticeKind === 'error' ? 'toast-error' : ''}" role="status">${escapeHtml(notice)}<button id="dismiss-notice" aria-label="Dismiss">×</button></div>` : ''}
-          ${sharedPlaylist ? `<div class="shared-banner"><span class="shared-icon">↗</span><div><strong>Someone shared a playlist with you</strong><span>Save your own copy to add or change tracks.</span></div><button class="button button-dark" id="save-shared">Save a copy</button><button class="icon-button banner-close" id="close-shared" aria-label="Close shared playlist">×</button></div>` : ''}
+          ${sharedPlaylist ? `<div class="shared-banner"><span class="shared-icon">↗</span><div><strong>Someone shared a playlist with you</strong><span>Reorder it your way and react to the tracks. Your order stays on this device.</span></div><button class="button button-dark" id="save-shared">Save a copy</button><button class="icon-button banner-close" id="close-shared" aria-label="Close shared playlist">×</button></div>` : ''}
           ${active ? playlistView(active, readonly) : welcomeView()}
         </section>
       </main>
@@ -238,10 +293,10 @@ function playlistView(playlist: Playlist, readonly: boolean): string {
       <p class="playlist-meta"><span class="avatar tiny">${readonly ? '♥' : 's'}</span> ${playlist.recipient ? `Made for <strong>${escapeHtml(playlist.recipient)}</strong>` : readonly ? 'Shared by someone' : 'Your collection'}${playlist.sender ? ` by <strong>${escapeHtml(playlist.sender)}</strong>` : ''} <span class="meta-separator">·</span> ${songs.length} ${songs.length === 1 ? 'track' : 'tracks'}</p>
       <p class="playlist-description">${escapeHtml(dedication)}</p>
       ${!readonly ? `<div class="personalize-mix"><label>Made for<input id="recipient-name" maxlength="40" value="${escapeHtml(playlist.recipient ?? '')}" placeholder="Add their name"></label><label>Made by<input id="sender-name" maxlength="40" value="${escapeHtml(playlist.sender ?? '')}" placeholder="Add your name"></label><label class="dedication-field">Dedication<input id="playlist-dedication" maxlength="140" value="${escapeHtml(playlist.dedication ?? '')}" placeholder="Write a few words"></label><span>Saved automatically</span></div>` : ''}
-      <div class="playlist-main-actions">${listenButton}${!readonly ? `<button class="button button-dark" id="add-track">＋ <span>Add tracks</span></button><button class="button button-quiet" id="sort-playlist">↕ <span>Sort A–Z</span></button><button class="button button-quiet" id="import-trigger">↑ <span>Import file</span></button>` : ''}</div>
+      <div class="playlist-main-actions">${listenButton}${readonly && currentShareId ? `<button class="button button-quiet" id="reset-shared-order">↺ <span>Original order</span></button>` : ''}${!readonly ? `<button class="button button-dark" id="add-track">＋ <span>Add tracks</span></button><button class="button button-quiet" id="sort-playlist">↕ <span>Sort A–Z</span></button><button class="button button-quiet" id="import-trigger">↑ <span>Import file</span></button>` : ''}</div>
     </div>
     ${playerOpen && playerPlaylistId === playlist.id ? queuePlayer(playlist) : ''}
-    <section class="track-section"><div class="track-header"><span class="track-number">ORDER</span><span>TITLE <i>click to edit</i></span><span>SERVICE</span><span>PLAY</span><span></span></div>${songs.length ? songs.map((song, index) => trackRow(song, index, readonly, songs.length)).join('') : `<div class="empty-tracks"><div class="empty-vinyl">♫</div><strong>This playlist is waiting for a first track.</strong><span>${readonly ? 'It looks like this one is empty.' : 'Paste one link or a whole list from your music apps.'}</span>${!readonly ? '<button class="button button-outline" id="add-first">Add tracks →</button>' : ''}</div>`}</section>
+    <section class="track-section"><div class="track-header"><span class="track-number">ORDER</span><span>TITLE ${readonly ? '' : '<i>click to edit</i>'}</span><span>SERVICE</span><span>PLAY</span><span></span></div>${songs.length ? songs.map((song, index) => trackRow(song, index, readonly, songs.length)).join('') : `<div class="empty-tracks"><div class="empty-vinyl">♫</div><strong>This playlist is waiting for a first track.</strong><span>${readonly ? 'It looks like this one is empty.' : 'Paste one link or a whole list from your music apps.'}</span>${!readonly ? '<button class="button button-outline" id="add-first">Add tracks →</button>' : ''}</div>`}</section>
     <div class="playlist-endnote"><span>✳</span> A good playlist is a little piece of you.</div>
   </div>`;
 }
@@ -270,7 +325,13 @@ function trackRow(song: Song, index: number, readonly: boolean, playlistLength: 
   const artwork = safeArtwork(song.artworkUrl);
   const embed = songEmbed(song);
   const active = playerOpen && playerTrackId === song.id;
-  return `<div class="track-item ${active ? 'is-playing' : ''}"><article class="track-row" data-track="${escapeHtml(song.id)}" ${readonly ? '' : 'draggable="true"'}><span class="track-number">${readonly ? '' : '<i class="drag-grip" aria-hidden="true">⠿</i>'}<b>${String(index + 1).padStart(2, '0')}</b></span><div class="track-details"><div class="track-icon ${song.source.toLowerCase().replace(/\s/g, '-')}" aria-hidden="true">${artwork ? `<img src="${escapeHtml(artwork)}" alt="" loading="lazy" decoding="async">` : song.source === 'YouTube' ? '▶' : song.source === 'Spotify' ? '◉' : song.source === 'Apple Music' ? '♫' : song.source === 'Tidal' ? '▦' : '☁'}</div><div class="track-text"><textarea class="song-title" data-song="${escapeHtml(song.id)}" data-field="title" aria-label="Track title" rows="1" ${readonly ? 'readonly' : ''}>${escapeHtml(song.title)}</textarea><input class="song-artist" data-song="${escapeHtml(song.id)}" data-field="artist" aria-label="Artist" placeholder="Add artist name" value="${escapeHtml(song.artist)}" ${readonly ? 'readonly' : ''}></div></div><span class="service-name">${escapeHtml(song.source)}</span>${embed ? `<button class="link-button play-track" data-play-track="${escapeHtml(song.id)}" aria-label="Play ${escapeHtml(song.title)}">${active ? '●' : '▶'} <span>${active ? 'Playing' : 'Play'}</span></button>` : `<a class="link-button" href="${escapeHtml(song.url)}" target="_blank" rel="noreferrer" title="Open track link">↗ <span>Open</span></a>`}${!readonly ? `<div class="track-actions"><button class="icon-button move-track" data-move="${escapeHtml(song.id)}" data-offset="-1" aria-label="Move ${escapeHtml(song.title)} up" ${index === 0 ? 'disabled' : ''}>↑</button><button class="icon-button move-track" data-move="${escapeHtml(song.id)}" data-offset="1" aria-label="Move ${escapeHtml(song.title)} down" ${index === playlistLength - 1 ? 'disabled' : ''}>↓</button><button class="icon-button remove-track" data-remove="${escapeHtml(song.id)}" aria-label="Remove ${escapeHtml(song.title)}">×</button></div>` : '<span></span>'}</article></div>`;
+  const reorderable = !readonly || !!currentShareId;
+  const reaction = reactions[song.id] ?? { likes: 0, dislikes: 0, mine: 0 };
+  const feedback = currentShareId
+    ? `<div class="reaction-buttons"><button class="reaction-button ${reaction.mine === 1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="1" aria-label="Like ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === 1}">👍 <span>${reaction.likes}</span></button><button class="reaction-button ${reaction.mine === -1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="-1" aria-label="Dislike ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === -1}">👎 <span>${reaction.dislikes}</span></button></div>`
+    : (!readonly && currentId && shareKeys()[currentId]) ? `<div class="reaction-counts" aria-label="Recipient reactions">👍 ${reaction.likes} · 👎 ${reaction.dislikes}</div>` : '';
+  const actions = reorderable ? `<div class="track-actions"><button class="icon-button move-track" data-move="${escapeHtml(song.id)}" data-offset="-1" aria-label="Move ${escapeHtml(song.title)} up" ${index === 0 ? 'disabled' : ''}>↑</button><button class="icon-button move-track" data-move="${escapeHtml(song.id)}" data-offset="1" aria-label="Move ${escapeHtml(song.title)} down" ${index === playlistLength - 1 ? 'disabled' : ''}>↓</button>${!readonly ? `<button class="icon-button remove-track" data-remove="${escapeHtml(song.id)}" aria-label="Remove ${escapeHtml(song.title)}">×</button>` : ''}</div>` : '<span></span>';
+  return `<div class="track-item ${active ? 'is-playing' : ''}"><article class="track-row" data-track="${escapeHtml(song.id)}" ${reorderable ? 'draggable="true"' : ''}><span class="track-number">${reorderable ? '<i class="drag-grip" aria-hidden="true">⠿</i>' : ''}<b>${String(index + 1).padStart(2, '0')}</b></span><div class="track-details"><div class="track-icon ${song.source.toLowerCase().replace(/\s/g, '-')}" aria-hidden="true">${artwork ? `<img src="${escapeHtml(artwork)}" alt="" loading="lazy" decoding="async">` : song.source === 'YouTube' ? '▶' : song.source === 'Spotify' ? '◉' : song.source === 'Apple Music' ? '♫' : song.source === 'Tidal' ? '▦' : '☁'}</div><div class="track-text"><textarea class="song-title" data-song="${escapeHtml(song.id)}" data-field="title" aria-label="Track title" rows="1" ${readonly ? 'readonly' : ''}>${escapeHtml(song.title)}</textarea><input class="song-artist" data-song="${escapeHtml(song.id)}" data-field="artist" aria-label="Artist" placeholder="Add artist name" value="${escapeHtml(song.artist)}" ${readonly ? 'readonly' : ''}>${feedback}</div></div><span class="service-name">${escapeHtml(song.source)}</span>${embed ? `<button class="link-button play-track" data-play-track="${escapeHtml(song.id)}" aria-label="Play ${escapeHtml(song.title)}">${active ? '●' : '▶'} <span>${active ? 'Playing' : 'Play'}</span></button>` : `<a class="link-button" href="${escapeHtml(song.url)}" target="_blank" rel="noreferrer" title="Open track link">↗ <span>Open</span></a>`}${actions}</article></div>`;
 }
 
 function startPlayer(trackId?: string): void {
@@ -334,6 +395,44 @@ function closePlayer(): void {
   requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('#play-mix')?.focus());
 }
 
+function moveSharedSong(songId: string, offset?: -1 | 1, targetId?: string): void {
+  if (!sharedPlaylist) return;
+  const from = sharedPlaylist.songs.findIndex(song => song.id === songId);
+  const to = targetId ? sharedPlaylist.songs.findIndex(song => song.id === targetId) : from + (offset ?? 0);
+  if (from < 0 || to < 0 || to >= sharedPlaylist.songs.length || from === to) return;
+  const [song] = sharedPlaylist.songs.splice(from, 1);
+  sharedPlaylist.songs.splice(to, 0, song);
+  saveSharedOrder();
+  notice = 'Your track order is saved on this device.'; noticeKind = 'success'; render();
+}
+
+function resetSharedOrder(): void {
+  if (!sharedPlaylist || !currentShareId) return;
+  const positions = new Map(senderOrder.map((id, index) => [id, index]));
+  sharedPlaylist.songs.sort((a, b) => (positions.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (positions.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+  try {
+    const orders = JSON.parse(localStorage.getItem(SHARED_ORDER_KEY) ?? '{}') as Record<string, string[]>;
+    delete orders[currentShareId]; localStorage.setItem(SHARED_ORDER_KEY, JSON.stringify(orders));
+  } catch { /* The sender's order is still restored for this visit. */ }
+  notice = 'Restored the sender’s original order.'; noticeKind = 'success'; render();
+}
+
+async function setReaction(songId: string, requested: -1 | 1): Promise<void> {
+  if (!currentShareId) return;
+  const current = reactions[songId]?.mine ?? 0;
+  const reaction = current === requested ? 0 : requested;
+  try {
+    const response = await fetch(`/api/playlists/${encodeURIComponent(currentShareId)}/reactions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ songId, voterId: voterId(), reaction }),
+    });
+    if (!response.ok) throw new Error();
+    await loadReactions(currentShareId);
+  } catch {
+    notice = 'Your reaction could not be saved. Try again in a moment.'; noticeKind = 'error'; render();
+  }
+}
+
 function bindEvents(): void {
   const app = document.querySelector<HTMLDivElement>('#app')!;
   app.querySelector<HTMLSelectElement>('#theme-select')?.addEventListener('change', event => {
@@ -344,18 +443,19 @@ function bindEvents(): void {
     try { localStorage.setItem(THEME_KEY, currentTheme); } catch { /* Keep the choice for this page view. */ }
     render();
   });
-  app.querySelectorAll<HTMLElement>('[data-open]').forEach(el => el.addEventListener('click', () => { currentId = el.dataset.open!; sharedPlaylist = null; playerOpen = false; playerTrackId = null; playerPlaylistId = null; notice = ''; render(); }));
+  app.querySelectorAll<HTMLElement>('[data-open]').forEach(el => el.addEventListener('click', () => { currentId = el.dataset.open!; sharedPlaylist = null; currentShareId = null; playerOpen = false; playerTrackId = null; playerPlaylistId = null; notice = ''; loadOwnerReactions(currentId); render(); }));
   app.querySelector('#new-playlist')?.addEventListener('click', openCreate);
   app.querySelector('#welcome-create')?.addEventListener('click', openCreate);
   app.querySelectorAll('#add-track, #add-first').forEach(el => el.addEventListener('click', () => (document.querySelector<HTMLDialogElement>('#add-dialog')!).showModal()));
   app.querySelector('#sort-playlist')?.addEventListener('click', () => withPlaylist(id => manager.sortPlaylist(id), 'Tracks sorted by artist, then title.'));
   app.querySelector('#play-mix')?.addEventListener('click', () => startPlayer());
+  app.querySelector('#reset-shared-order')?.addEventListener('click', resetSharedOrder);
+  app.querySelectorAll<HTMLButtonElement>('[data-react]').forEach(button => button.addEventListener('click', () => void setReaction(button.dataset.react!, Number(button.dataset.reaction) as -1 | 1)));
   app.querySelectorAll<HTMLElement>('[data-play-track]').forEach(button => button.addEventListener('click', () => startPlayer(button.dataset.playTrack)));
   bindPlayerEvents();
   app.querySelectorAll<HTMLButtonElement>('[data-move]').forEach(button => button.addEventListener('click', () => {
-    if (!currentId) return;
-    manager.moveSong(currentId, button.dataset.move!, Number(button.dataset.offset) as -1 | 1);
-    notice = 'Track order updated.'; void syncCurrentShare(); render();
+    if (sharedPlaylist) { moveSharedSong(button.dataset.move!, Number(button.dataset.offset) as -1 | 1); return; }
+    if (currentId) { manager.moveSong(currentId, button.dataset.move!, Number(button.dataset.offset) as -1 | 1); notice = 'Track order updated.'; void syncCurrentShare(); render(); }
   }));
   let draggedTrack = '';
   app.querySelectorAll<HTMLElement>('[data-track][draggable="true"]').forEach(row => {
@@ -370,9 +470,9 @@ function bindEvents(): void {
     row.addEventListener('drop', event => {
       event.preventDefault();
       const target = row.dataset.track ?? '';
-      if (!currentId || !draggedTrack || !target || draggedTrack === target) return;
-      manager.moveSongTo(currentId, draggedTrack, target);
-      notice = 'Track order updated.'; void syncCurrentShare(); render();
+      if (!draggedTrack || !target || draggedTrack === target) return;
+      if (sharedPlaylist) { moveSharedSong(draggedTrack, undefined, target); return; }
+      if (currentId) { manager.moveSongTo(currentId, draggedTrack, target); notice = 'Track order updated.'; void syncCurrentShare(); render(); }
     });
     row.addEventListener('dragend', () => { draggedTrack = ''; row.classList.remove('dragging'); app.querySelectorAll('.drop-target').forEach(item => item.classList.remove('drop-target')); });
   });
@@ -380,7 +480,7 @@ function bindEvents(): void {
   app.querySelector('#export-playlist')?.addEventListener('click', exportPlaylist);
   app.querySelector('#delete-playlist')?.addEventListener('click', deletePlaylist);
   app.querySelector('#save-shared')?.addEventListener('click', saveShared);
-  app.querySelector('#close-shared')?.addEventListener('click', () => { sharedPlaylist = null; history.replaceState(null, '', location.pathname + location.search); render(); });
+  app.querySelector('#close-shared')?.addEventListener('click', () => { sharedPlaylist = null; currentShareId = null; reactions = {}; history.replaceState(null, '', location.pathname + location.search); render(); });
   app.querySelectorAll('#import-trigger').forEach(el => el.addEventListener('click', () => document.querySelector<HTMLInputElement>('#import-file')!.click()));
   app.querySelector('#dismiss-notice')?.addEventListener('click', () => { notice = ''; render(); });
   app.querySelectorAll<HTMLElement>('[data-close]').forEach(el => el.addEventListener('click', () => el.closest('dialog')?.close()));
@@ -476,6 +576,7 @@ async function sharePlaylist(): Promise<void> {
       notice = `Live link created. Copy it from the address bar: ${url}`;
     }
     noticeKind = 'success';
+    void loadReactions(credentials.id);
   } catch {
     notice = 'Could not create a live share link. Run the app with the Cloudflare Pages local server and check the D1 setup.';
     noticeKind = 'error';
@@ -532,4 +633,5 @@ void readSharedPlaylist().then(playlist => {
     noticeKind = 'error';
   }
   render();
+  if (playlist && currentShareId) void loadReactions(currentShareId);
 });
