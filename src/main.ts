@@ -282,16 +282,18 @@ function playlistView(playlist: Playlist, readonly: boolean): string {
   const coverLabel: Record<Theme, string> = { 'side-a': 'A SIDE ORIGINAL', mixtape: playlist.recipient?.trim() ? `MIXED FOR ${escapeHtml(playlist.recipient.trim())} · 90 MIN` : 'YOUR MIX · 90 MIN', 'cd-mix': 'COMPACT MEMORIES · VOL. 01', playlist: 'NOW PLAYING · YOUR MIX' };
   const description: Record<Theme, string> = { 'side-a': 'A collection of good things, gathered in one place.', mixtape: 'A little handwritten feeling, set to a favorite side.', 'cd-mix': 'A keepsake collection, ready for another spin.', playlist: 'A soundtrack for right here, right now.' };
   const cover = themeArtwork(currentTheme, true, playlist);
-  const dedication = playlist.dedication?.trim() || description[currentTheme];
+  const customDedication = playlist.dedication?.trim() ?? '';
+  const dedication = customDedication || description[currentTheme];
+  const dedicationNote = customDedication ? `<aside class="cover-dedication"><span>A NOTE FROM ${escapeHtml((playlist.sender?.trim() || 'THE SENDER').toUpperCase())}</span><p>${escapeHtml(customDedication)}</p></aside>` : '';
   const canPlay = playableSongs(playlist).length > 0;
   const listenButton = canPlay ? `<button class="button button-play" id="play-mix">▶ <span>${playerOpen && playerPlaylistId === playlist.id ? 'Restart mix' : 'Play mix'}</span></button>` : '';
   return `<div class="playlist-page">
-    <div class="playlist-cover theme-cover theme-cover-${currentTheme}">${cover}<span class="cover-label">${coverLabel[currentTheme]}</span></div>
+    <div class="playlist-cover theme-cover theme-cover-${currentTheme} ${customDedication ? 'has-dedication' : ''}">${dedicationNote}${cover}<span class="cover-label">${coverLabel[currentTheme]}</span></div>
     <div class="playlist-heading">
       <div class="playlist-heading-top"><span class="eyebrow">${readonly ? 'SHARED WITH YOU' : 'YOUR COLLECTION'}</span><div class="heading-actions">${!readonly ? `<button class="button button-outline" id="export-playlist">↓ <span>Export</span></button><button class="button button-outline" id="share-playlist">↗ <span>Copy live link</span></button><button class="button button-outline danger-button" id="delete-playlist" aria-label="Delete playlist">× <span>Delete</span></button>` : ''}</div></div>
       <h1>${escapeHtml(playlist.name)}</h1>
       <p class="playlist-meta"><span class="avatar tiny">${readonly ? '♥' : 's'}</span> ${playlist.recipient ? `Made for <strong>${escapeHtml(playlist.recipient)}</strong>` : readonly ? 'Shared by someone' : 'Your collection'}${playlist.sender ? ` by <strong>${escapeHtml(playlist.sender)}</strong>` : ''} <span class="meta-separator">·</span> ${songs.length} ${songs.length === 1 ? 'track' : 'tracks'}</p>
-      <p class="playlist-description">${escapeHtml(dedication)}</p>
+      ${customDedication ? '' : `<p class="playlist-description">${escapeHtml(dedication)}</p>`}
       ${!readonly ? `<div class="personalize-mix"><label>Made for<input id="recipient-name" maxlength="40" value="${escapeHtml(playlist.recipient ?? '')}" placeholder="Add their name"></label><label>Made by<input id="sender-name" maxlength="40" value="${escapeHtml(playlist.sender ?? '')}" placeholder="Add your name"></label><label class="dedication-field">Dedication<input id="playlist-dedication" maxlength="140" value="${escapeHtml(playlist.dedication ?? '')}" placeholder="Write a few words"></label><span>Saved automatically</span></div>` : ''}
       <div class="playlist-main-actions">${listenButton}${readonly && currentShareId ? `<button class="button button-quiet" id="reset-shared-order">↺ <span>Original order</span></button>` : ''}${!readonly ? `<button class="button button-dark" id="add-track">＋ <span>Add tracks</span></button><button class="button button-quiet" id="sort-playlist">↕ <span>Sort A–Z</span></button><button class="button button-quiet" id="import-trigger">↑ <span>Import file</span></button>` : ''}</div>
     </div>

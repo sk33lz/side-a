@@ -25,7 +25,7 @@
 .cassette-label b{font:700 11px var(--mono);letter-spacing:.2em}.cassette-label span{font:italic 10px var(--serif)}
 .cassette-holes{position:absolute;left:32px;right:32px;bottom:12px;display:flex;justify-content:space-between}
 .cassette-holes i{width:8px;height:8px;border-radius:50%;background:#69445f;box-shadow:inset 0 1px #ffffff60}
-.cassette-brand{position:absolute;right:17px;top:20px;display:flex;flex-direction:column;align-items:flex-end;gap:3px;color:#704563;font:7px/1 var(--mono);letter-spacing:.12em}
+.cassette-brand{position:absolute;right:12px;top:30px;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:43px;padding:4px 3px 3px;border-radius:3px;background:#f5e8cfcc;color:#704563;font:7px/1 var(--mono);letter-spacing:.12em}
 .cassette-brand span:last-child{font-size:6px;letter-spacing:.08em}
 .theme-art-mixtape .theme-art-caption{color:#ffd5dd}.theme-art-mixtape .theme-art-caption:before{content:'✳  '}
 .theme-cover-mixtape{background:radial-gradient(ellipse at 50% 40%,#a5507e,#542546 78%)}
@@ -244,7 +244,7 @@ body,.topbar,.sidebar,.footer,.button,.playlist-cover,.track-row{transition:back
 .theme-cover .cassette-label{left:14px;right:14px;top:67px;height:56px;gap:4px;border:1px solid #9f6582}
 .theme-cover .cassette-label b{max-width:215px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;line-height:1;letter-spacing:.04em}
 .theme-cover .cassette-label span{max-width:215px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font:600 10px/1.15 var(--serif);text-align:center;color:#64344f}
-.theme-cover .cassette-brand{top:16px;font-size:10px;font-weight:700;color:#54324d}
+.theme-cover .cassette-brand{top:29px;font-size:9px;font-weight:700;color:#54324d}
 .theme-cover .cassette-brand span:last-child{font-size:8px}
 .theme-cover .cd-marker{font-size:17px;font-weight:600;color:#354f62}
 .theme-cover .player-top{font-size:10px;font-weight:700;color:#e2e1f5}
@@ -263,6 +263,28 @@ body,.topbar,.sidebar,.footer,.button,.playlist-cover,.track-row{transition:back
 @keyframes eq-bar{from{height:20%;opacity:.6}to{height:100%;opacity:1}}
 @keyframes progress-play{from{width:18%}to{width:76%}}
 @media(max-width:650px){.personal-fields,.personalize-mix{grid-template-columns:1fr}.format-picker{grid-template-columns:repeat(2,1fr)}.record-scene,.cassette-scene,.cd-scene,.player-scene{transform:scale(.82)}.scene-small{transform:scale(.52)}}
+
+/* Personalized cover note and larger cassette typography. */
+.playlist-cover.has-dedication{height:250px}
+.cover-dedication{position:absolute;z-index:4;left:28px;top:50%;width:245px;padding:17px 18px 16px;transform:translateY(-50%) rotate(-1.5deg);background:#fff9e9;color:#5e5149;border:1px solid #e2d2b3;box-shadow:0 10px 24px #2e241e2b;text-align:left}
+.cover-dedication:before{content:'';position:absolute;left:20px;right:20px;top:-7px;height:13px;background:#e9d6a8aa;transform:rotate(1deg)}
+.cover-dedication span{display:block;margin-bottom:8px;color:#9a725d;font:700 8px var(--mono);letter-spacing:.12em}
+.cover-dedication p{margin:0;font:italic 16px/1.4 var(--serif);overflow-wrap:anywhere}
+.playlist-cover.has-dedication .scene-small{transform:translateX(145px) scale(.68)}
+.theme-cover-mixtape.has-dedication .cassette-scene.scene-small{transform:translateX(135px) scale(.94)}
+.theme-cover-mixtape.has-dedication .cassette-art{right:28px;bottom:29px}
+.theme-cover-mixtape .cassette-label{top:64px;height:63px;padding:5px 8px}
+.theme-cover-mixtape .cassette-label b{font-size:17px}
+.theme-cover-mixtape .cassette-label span{max-width:225px;font:600 12px/1.2 var(--serif)}
+
+@media(max-width:650px){
+  .playlist-cover.has-dedication{height:310px;align-items:start}
+  .cover-dedication{left:12px;right:12px;top:auto;bottom:12px;width:auto;padding:13px 15px 12px;transform:rotate(-1deg)}
+  .cover-dedication span{margin-bottom:5px}.cover-dedication p{font-size:14px;line-height:1.3}
+  .playlist-cover.has-dedication .scene-small{transform:translateY(-35px) scale(.54)}
+  .theme-cover-mixtape.has-dedication .cassette-scene.scene-small{transform:translateY(-35px) scale(.78)}
+  .theme-cover-mixtape .cassette-label span{font-size:12px}
+}
 
 /* Usability pass */
 .topbar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--paper) 92%,transparent);backdrop-filter:blur(14px)}
