@@ -329,6 +329,9 @@ function playlistView(playlist: Playlist, readonly: boolean): string {
   const dedicationNote = customDedication ? `<aside class="cover-dedication"><span>A NOTE FROM ${escapeHtml((playlist.sender?.trim() || 'THE SENDER').toUpperCase())}</span><p>${escapeHtml(customDedication)}</p></aside>` : '';
   const duration = playlistDuration(playlist);
   const durationMeta = duration.seconds ? ` <span class="meta-separator">·</span> ${formatDuration(duration.seconds)}${duration.complete ? '' : '+'}` : '';
+  const knownDurations = playlist.songs.filter(song => song.durationSeconds && song.durationSeconds > 0).length;
+  const durationHelp = !readonly && playlist.songs.length && !duration.complete
+    ? `<p class="duration-help"><b>${knownDurations} of ${playlist.songs.length}</b> track lengths known. Play each YouTube track once or enter its length as <strong>m:ss</strong>.</p>` : '';
   const canPlay = playableSongs(playlist).length > 0;
   const listenButton = canPlay ? `<button class="button button-play" id="play-mix">▶ <span>${playerOpen && playerPlaylistId === playlist.id ? 'Restart mix' : 'Play mix'}</span></button>` : '';
   return `<div class="playlist-page">
@@ -340,6 +343,7 @@ function playlistView(playlist: Playlist, readonly: boolean): string {
       ${customDedication ? '' : `<p class="playlist-description">${escapeHtml(dedication)}</p>`}
       ${!readonly ? `<div class="personalize-mix"><label>Made for<input id="recipient-name" maxlength="40" value="${escapeHtml(playlist.recipient ?? '')}" placeholder="Add their name"></label><label>Made by<input id="sender-name" maxlength="40" value="${escapeHtml(playlist.sender ?? '')}" placeholder="Add your name"></label><label class="dedication-field">Dedication<input id="playlist-dedication" maxlength="140" value="${escapeHtml(playlist.dedication ?? '')}" placeholder="Write a few words"></label><span>Saved automatically</span></div>` : ''}
       <div class="playlist-main-actions">${listenButton}${readonly && currentShareId ? `<button class="button button-quiet" id="reset-shared-order">↺ <span>Original order</span></button>` : ''}${!readonly ? `<button class="button button-dark" id="add-track">＋ <span>Add tracks</span></button><button class="button button-quiet" id="sort-playlist">↕ <span>Sort A–Z</span></button><button class="button button-quiet" id="import-trigger">↑ <span>Import file</span></button>` : ''}</div>
+      ${durationHelp}
     </div>
     ${playerOpen && playerPlaylistId === playlist.id ? queuePlayer(playlist) : ''}
     <section class="track-section"><div class="track-header"><span class="track-number">ORDER</span><span>TITLE ${readonly ? '' : '<i>click to edit</i>'}</span><span>SERVICE</span><span>PLAY</span><span></span></div>${songs.length ? songs.map((song, index) => trackRow(song, index, readonly, songs.length)).join('') : `<div class="empty-tracks"><div class="empty-vinyl">♫</div><strong>This playlist is waiting for a first track.</strong><span>${readonly ? 'It looks like this one is empty.' : 'Paste one link or a whole list from your music apps.'}</span>${!readonly ? '<button class="button button-outline" id="add-first">Add tracks →</button>' : ''}</div>`}</section>
@@ -374,7 +378,7 @@ function trackRow(song: Song, index: number, readonly: boolean, playlistLength: 
   const reorderable = !readonly || !!currentShareId;
   const reaction = reactions[song.id] ?? { likes: 0, dislikes: 0, mine: 0 };
   const feedback = currentShareId
-    ? `<div class="reaction-buttons"><button class="reaction-button ${reaction.mine === 1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="1" aria-label="Like ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === 1}">👍 <span>${reaction.likes}</span></button><button class="reaction-button ${reaction.mine === -1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="-1" aria-label="Dislike ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === -1}">👎 <span>${reaction.dislikes}</span></button></div>`
+    ? `<div class="reaction-buttons" role="group" aria-label="Your reaction to ${escapeHtml(song.title)}"><span class="reaction-label">YOUR VOTE</span><button class="reaction-button reaction-up ${reaction.mine === 1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="1" aria-label="Like ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === 1}"><b>👍</b><span>Like · ${reaction.likes}</span></button><button class="reaction-button reaction-down ${reaction.mine === -1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="-1" aria-label="Dislike ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === -1}"><b>👎</b><span>Not for me · ${reaction.dislikes}</span></button></div>`
     : (!readonly && currentId && shareKeys()[currentId]) ? `<div class="reaction-counts" aria-label="Recipient reactions">👍 ${reaction.likes} · 👎 ${reaction.dislikes}</div>` : '';
   const durationControl = readonly
     ? (song.durationSeconds ? `<span class="track-duration">${formatDuration(song.durationSeconds)}</span>` : '')
