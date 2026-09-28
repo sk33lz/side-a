@@ -10,6 +10,7 @@ export interface Song {
   addedAt: string;
   artworkUrl?: string;
   embedUrl?: string;
+  durationSeconds?: number;
 }
 
 export interface Playlist {

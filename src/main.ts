@@ -3,6 +3,10 @@ import { LinkIngestionService } from '../api/linkIngestionService';
 import type { Playlist, PlaylistTheme, Song } from '../api/models';
 import './style.css';
 
+type YouTubePlayer = { getDuration(): number; destroy(): void };
+type YouTubeApi = { Player: new (element: HTMLIFrameElement, options: { events: { onReady(event: { target: YouTubePlayer }): void } }) => YouTubePlayer };
+declare global { interface Window { YT?: YouTubeApi; onYouTubeIframeAPIReady?: () => void } }
+
 const manager = new PlaylistManager();
 const ingestion = new LinkIngestionService();
 const createId = (): string => typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -31,11 +35,39 @@ let currentShareId: string | null = null;
 let senderOrder: string[] = [];
 type ReactionSummary = { likes: number; dislikes: number; mine: -1 | 0 | 1 };
 let reactions: Record<string, ReactionSummary> = {};
+let youtubeApiPromise: Promise<YouTubeApi> | null = null;
+let activeYouTubePlayer: YouTubePlayer | null = null;
 
 function isTheme(value: unknown): value is Theme { return typeof value === 'string' && themes.includes(value as Theme); }
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
+}
+
+function formatDuration(seconds?: number): string {
+  if (!seconds || seconds <= 0) return '';
+  const rounded = Math.round(seconds);
+  return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, '0')}`;
+}
+
+function parseDuration(value: string): number | undefined {
+  const clean = value.trim();
+  if (!clean) return undefined;
+  if (/^\d+$/.test(clean)) return Number(clean) * 60;
+  const match = clean.match(/^(\d+):([0-5]\d)$/);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : undefined;
+}
+
+function playlistDuration(playlist?: Playlist): { seconds: number; complete: boolean } {
+  if (!playlist?.songs.length) return { seconds: 0, complete: false };
+  const known = playlist.songs.filter(song => typeof song.durationSeconds === 'number' && song.durationSeconds > 0);
+  return { seconds: known.reduce((total, song) => total + (song.durationSeconds ?? 0), 0), complete: known.length === playlist.songs.length };
+}
+
+function tapeLength(playlist?: Playlist): string {
+  const duration = playlistDuration(playlist);
+  if (!duration.seconds) return '-- MIN';
+  return `${Math.ceil(duration.seconds / 60)}${duration.complete ? '' : '+'} MIN`;
 }
 
 function voterId(): string {
@@ -260,7 +292,7 @@ function themeArtwork(theme: Theme, cover = false, playlist?: Playlist): string 
   const title = escapeHtml(playlist?.name?.trim() || themeLabels[theme]);
   const format = theme === 'side-a' ? 'record' : theme === 'cd-mix' ? 'CD mix' : theme === 'playlist' ? 'playlist' : 'mixtape';
   const byline = playlist ? `A ${format}${playlist.recipient?.trim() ? ` made for ${recipient}` : ''}${playlist.sender?.trim() ? ` by ${sender}` : ''}` : `A ${format} made for ${recipient}`;
-  if (theme === 'mixtape') return `<div class="cassette-scene ${cover ? 'scene-small' : ''}" aria-hidden="true"><div class="j-card"><span>FOR:</span><b>${recipient}</b><i>01 ________</i><i>02 ________</i><i>03 ________</i><em>play loud</em></div><div class="cassette-art ${cover ? 'cassette-small' : ''}"><div class="cassette-screw screw-a"></div><div class="cassette-screw screw-b"></div><div class="cassette-window"><div class="tape-ribbon"><span></span></div><i class="tape-reel reel-left"></i><i class="tape-reel reel-right"></i></div><div class="cassette-label"><b>${title}</b><span>${byline}</span></div><div class="cassette-holes"><i></i><i></i><i></i><i></i></div><div class="cassette-brand"><span>SIDE A</span><span>90 MIN</span></div></div></div>`;
+  if (theme === 'mixtape') return `<div class="cassette-scene ${cover ? 'scene-small' : ''}" aria-hidden="true"><div class="j-card"><span>FOR:</span><b>${recipient}</b><i>01 ________</i><i>02 ________</i><i>03 ________</i><em>play loud</em></div><div class="cassette-art ${cover ? 'cassette-small' : ''}"><div class="cassette-screw screw-a"></div><div class="cassette-screw screw-b"></div><div class="cassette-window"><div class="tape-ribbon"><span></span></div><i class="tape-reel reel-left"></i><i class="tape-reel reel-right"></i></div><div class="cassette-label"><b>${title}</b><span>${byline}</span></div><div class="cassette-holes"><i></i><i></i><i></i><i></i></div><div class="cassette-brand"><span>SIDE A</span><span>${tapeLength(playlist)}</span></div></div></div>`;
   if (theme === 'cd-mix') return `<div class="cd-scene ${cover ? 'scene-small' : ''}" aria-hidden="true"><div class="cd-booklet"><b>${title}</b><span>${byline}</span><span>01 play it again</span><span>02 all the way home</span></div><div class="cd-case ${cover ? 'cd-small' : ''}"><div class="cd-disc"><div class="cd-marker"><b>${title}</b><span>${byline}</span></div><div class="cd-hub"><span>CD<br>MIX</span></div><div class="cd-shine"></div></div><div class="cd-sticker">VOL. 01</div><div class="cd-track-lines"><i></i><i></i><i></i></div></div></div>`;
   if (theme === 'playlist') return `<div class="player-scene ${cover ? 'scene-small' : ''}" aria-hidden="true"><div class="queue-card queue-one"><span>UP NEXT</span><b>02</b></div><div class="queue-card queue-two"><span>IN THE MIX</span><b>03</b></div><div class="player-art ${cover ? 'player-small' : ''}"><div class="player-top"><span>FOR ${recipient.toUpperCase()}</span><b>•••</b></div><div class="player-album"><span>♫</span></div><div class="player-song"><b>${title}</b><span>${byline}</span></div><div class="player-progress"><i></i></div><div class="player-bars">${'<i></i>'.repeat(13)}</div><div class="player-controls"><span>↶</span><b>▶</b><span>↷</span></div></div></div>`;
   return `<div class="record-scene ${cover ? 'scene-small' : ''}" aria-hidden="true"><div class="record-sleeve"><span>${byline}</span><b>${title}</b><i>33⅓ RPM</i></div><div class="art-disc"><div class="disc-label"><span>${recipient}</span><b>♥</b></div></div><div class="tonearm"><i></i></div></div><div class="art-note note-one"><span>♫</span> good things take time</div><div class="art-note note-two">your mix, your people <span>↗</span></div><span class="art-spark spark-one">✳</span><span class="art-spark spark-two">✳</span><div class="art-caption">PLAY IT YOUR WAY <span>— No. 001</span></div>`;
@@ -285,6 +317,8 @@ function playlistView(playlist: Playlist, readonly: boolean): string {
   const customDedication = playlist.dedication?.trim() ?? '';
   const dedication = customDedication || description[currentTheme];
   const dedicationNote = customDedication ? `<aside class="cover-dedication"><span>A NOTE FROM ${escapeHtml((playlist.sender?.trim() || 'THE SENDER').toUpperCase())}</span><p>${escapeHtml(customDedication)}</p></aside>` : '';
+  const duration = playlistDuration(playlist);
+  const durationMeta = duration.seconds ? ` <span class="meta-separator">·</span> ${formatDuration(duration.seconds)}${duration.complete ? '' : '+'}` : '';
   const canPlay = playableSongs(playlist).length > 0;
   const listenButton = canPlay ? `<button class="button button-play" id="play-mix">▶ <span>${playerOpen && playerPlaylistId === playlist.id ? 'Restart mix' : 'Play mix'}</span></button>` : '';
   return `<div class="playlist-page">
@@ -292,7 +326,7 @@ function playlistView(playlist: Playlist, readonly: boolean): string {
     <div class="playlist-heading">
       <div class="playlist-heading-top"><span class="eyebrow">${readonly ? 'SHARED WITH YOU' : 'YOUR COLLECTION'}</span><div class="heading-actions">${!readonly ? `<button class="button button-outline" id="export-playlist">↓ <span>Export</span></button><button class="button button-outline" id="share-playlist">↗ <span>Copy live link</span></button><button class="button button-outline danger-button" id="delete-playlist" aria-label="Delete playlist">× <span>Delete</span></button>` : ''}</div></div>
       <h1>${escapeHtml(playlist.name)}</h1>
-      <p class="playlist-meta"><span class="avatar tiny">${readonly ? '♥' : 's'}</span> ${playlist.recipient ? `Made for <strong>${escapeHtml(playlist.recipient)}</strong>` : readonly ? 'Shared by someone' : 'Your collection'}${playlist.sender ? ` by <strong>${escapeHtml(playlist.sender)}</strong>` : ''} <span class="meta-separator">·</span> ${songs.length} ${songs.length === 1 ? 'track' : 'tracks'}</p>
+      <p class="playlist-meta"><span class="avatar tiny">${readonly ? '♥' : 's'}</span> ${playlist.recipient ? `Made for <strong>${escapeHtml(playlist.recipient)}</strong>` : readonly ? 'Shared by someone' : 'Your collection'}${playlist.sender ? ` by <strong>${escapeHtml(playlist.sender)}</strong>` : ''} <span class="meta-separator">·</span> ${songs.length} ${songs.length === 1 ? 'track' : 'tracks'}${durationMeta}</p>
       ${customDedication ? '' : `<p class="playlist-description">${escapeHtml(dedication)}</p>`}
       ${!readonly ? `<div class="personalize-mix"><label>Made for<input id="recipient-name" maxlength="40" value="${escapeHtml(playlist.recipient ?? '')}" placeholder="Add their name"></label><label>Made by<input id="sender-name" maxlength="40" value="${escapeHtml(playlist.sender ?? '')}" placeholder="Add your name"></label><label class="dedication-field">Dedication<input id="playlist-dedication" maxlength="140" value="${escapeHtml(playlist.dedication ?? '')}" placeholder="Write a few words"></label><span>Saved automatically</span></div>` : ''}
       <div class="playlist-main-actions">${listenButton}${readonly && currentShareId ? `<button class="button button-quiet" id="reset-shared-order">↺ <span>Original order</span></button>` : ''}${!readonly ? `<button class="button button-dark" id="add-track">＋ <span>Add tracks</span></button><button class="button button-quiet" id="sort-playlist">↕ <span>Sort A–Z</span></button><button class="button button-quiet" id="import-trigger">↑ <span>Import file</span></button>` : ''}</div>
@@ -318,7 +352,7 @@ function queuePlayer(playlist: Playlist): string {
       <div class="queue-copy"><span>NOW PLAYING · ${index + 1} OF ${queue.length}</span><strong>${escapeHtml(active.title)}</strong><small>${escapeHtml(active.artist || active.source)}</small></div>
       <div class="queue-controls"><button class="icon-button" id="player-prev" aria-label="Previous playable track">←</button><a class="queue-source" href="${escapeHtml(active.url)}" target="_blank" rel="noreferrer">Open in ${escapeHtml(active.source)}</a><button class="icon-button" id="player-next" aria-label="Next playable track">→</button><button class="icon-button queue-close" id="close-player" aria-label="Close player">×</button></div>
     </div>
-    ${embed ? `<iframe class="queue-frame" src="${escapeHtml(embed)}" title="Now playing ${escapeHtml(active.title)} by ${escapeHtml(active.artist || active.source)}" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation" allowfullscreen></iframe>` : ''}
+    ${embed ? `<iframe class="queue-frame" ${active.source === 'YouTube' ? `id="youtube-queue-player" data-youtube-duration-song="${escapeHtml(active.id)}"` : ''} src="${escapeHtml(embed)}" title="Now playing ${escapeHtml(active.title)} by ${escapeHtml(active.artist || active.source)}" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation" allowfullscreen></iframe>` : ''}
     <p class="queue-help">Use the player’s own play and pause controls. Previous and next move through every playable track in this mix.</p>
   </section>`;
 }
@@ -332,8 +366,11 @@ function trackRow(song: Song, index: number, readonly: boolean, playlistLength: 
   const feedback = currentShareId
     ? `<div class="reaction-buttons"><button class="reaction-button ${reaction.mine === 1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="1" aria-label="Like ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === 1}">👍 <span>${reaction.likes}</span></button><button class="reaction-button ${reaction.mine === -1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="-1" aria-label="Dislike ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === -1}">👎 <span>${reaction.dislikes}</span></button></div>`
     : (!readonly && currentId && shareKeys()[currentId]) ? `<div class="reaction-counts" aria-label="Recipient reactions">👍 ${reaction.likes} · 👎 ${reaction.dislikes}</div>` : '';
+  const durationControl = readonly
+    ? (song.durationSeconds ? `<span class="track-duration">${formatDuration(song.durationSeconds)}</span>` : '')
+    : `<label class="duration-editor">Length <input data-duration-song="${escapeHtml(song.id)}" value="${formatDuration(song.durationSeconds)}" placeholder="3:45" inputmode="numeric" aria-label="Length of ${escapeHtml(song.title)} in minutes and seconds"></label>`;
   const actions = reorderable ? `<div class="track-actions"><button class="icon-button move-track" data-move="${escapeHtml(song.id)}" data-offset="-1" aria-label="Move ${escapeHtml(song.title)} up" ${index === 0 ? 'disabled' : ''}>↑</button><button class="icon-button move-track" data-move="${escapeHtml(song.id)}" data-offset="1" aria-label="Move ${escapeHtml(song.title)} down" ${index === playlistLength - 1 ? 'disabled' : ''}>↓</button>${!readonly ? `<button class="icon-button remove-track" data-remove="${escapeHtml(song.id)}" aria-label="Remove ${escapeHtml(song.title)}">×</button>` : ''}</div>` : '<span></span>';
-  return `<div class="track-item ${active ? 'is-playing' : ''}"><article class="track-row" data-track="${escapeHtml(song.id)}" ${reorderable ? 'draggable="true"' : ''}><span class="track-number">${reorderable ? '<i class="drag-grip" aria-hidden="true">⠿</i>' : ''}<b>${String(index + 1).padStart(2, '0')}</b></span><div class="track-details"><div class="track-icon ${song.source.toLowerCase().replace(/\s/g, '-')}" aria-hidden="true">${artwork ? `<img src="${escapeHtml(artwork)}" alt="" loading="lazy" decoding="async">` : song.source === 'YouTube' ? '▶' : song.source === 'Spotify' ? '◉' : song.source === 'Apple Music' ? '♫' : song.source === 'Tidal' ? '▦' : '☁'}</div><div class="track-text"><textarea class="song-title" data-song="${escapeHtml(song.id)}" data-field="title" aria-label="Track title" rows="1" ${readonly ? 'readonly' : ''}>${escapeHtml(song.title)}</textarea><input class="song-artist" data-song="${escapeHtml(song.id)}" data-field="artist" aria-label="Artist" placeholder="Add artist name" value="${escapeHtml(song.artist)}" ${readonly ? 'readonly' : ''}>${feedback}</div></div><span class="service-name">${escapeHtml(song.source)}</span>${embed ? `<button class="link-button play-track" data-play-track="${escapeHtml(song.id)}" aria-label="Play ${escapeHtml(song.title)}">${active ? '●' : '▶'} <span>${active ? 'Playing' : 'Play'}</span></button>` : `<a class="link-button" href="${escapeHtml(song.url)}" target="_blank" rel="noreferrer" title="Open track link">↗ <span>Open</span></a>`}${actions}</article></div>`;
+  return `<div class="track-item ${active ? 'is-playing' : ''}"><article class="track-row" data-track="${escapeHtml(song.id)}" ${reorderable ? 'draggable="true"' : ''}><span class="track-number">${reorderable ? '<i class="drag-grip" aria-hidden="true">⠿</i>' : ''}<b>${String(index + 1).padStart(2, '0')}</b></span><div class="track-details"><div class="track-icon ${song.source.toLowerCase().replace(/\s/g, '-')}" aria-hidden="true">${artwork ? `<img src="${escapeHtml(artwork)}" alt="" loading="lazy" decoding="async">` : song.source === 'YouTube' ? '▶' : song.source === 'Spotify' ? '◉' : song.source === 'Apple Music' ? '♫' : song.source === 'Tidal' ? '▦' : '☁'}</div><div class="track-text"><textarea class="song-title" data-song="${escapeHtml(song.id)}" data-field="title" aria-label="Track title" rows="1" ${readonly ? 'readonly' : ''}>${escapeHtml(song.title)}</textarea><input class="song-artist" data-song="${escapeHtml(song.id)}" data-field="artist" aria-label="Artist" placeholder="Add artist name" value="${escapeHtml(song.artist)}" ${readonly ? 'readonly' : ''}>${durationControl}${feedback}</div></div><span class="service-name">${escapeHtml(song.source)}</span>${embed ? `<button class="link-button play-track" data-play-track="${escapeHtml(song.id)}" aria-label="Play ${escapeHtml(song.title)}">${active ? '●' : '▶'} <span>${active ? 'Playing' : 'Play'}</span></button>` : `<a class="link-button" href="${escapeHtml(song.url)}" target="_blank" rel="noreferrer" title="Open track link">↗ <span>Open</span></a>`}${actions}</article></div>`;
 }
 
 function startPlayer(trackId?: string): void {
@@ -390,6 +427,45 @@ function bindPlayerEvents(): void {
   document.querySelector('#player-prev')?.addEventListener('click', () => stepPlayer(-1));
   document.querySelector('#player-next')?.addEventListener('click', () => stepPlayer(1));
   document.querySelector('#close-player')?.addEventListener('click', closePlayer);
+  void captureYouTubeDuration();
+}
+
+function loadYouTubeApi(): Promise<YouTubeApi> {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (youtubeApiPromise) return youtubeApiPromise;
+  youtubeApiPromise = new Promise<YouTubeApi>((resolve, reject) => {
+    const previous = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previous?.();
+      if (window.YT?.Player) resolve(window.YT); else reject(new Error('YouTube player API did not load.'));
+    };
+    const script = document.createElement('script'); script.src = 'https://www.youtube.com/iframe_api'; script.async = true; script.onerror = () => reject(new Error('YouTube player API could not be loaded.'));
+    document.head.appendChild(script);
+  });
+  return youtubeApiPromise;
+}
+
+async function captureYouTubeDuration(): Promise<void> {
+  if (!currentId || sharedPlaylist) return;
+  const iframe = document.querySelector<HTMLIFrameElement>('[data-youtube-duration-song]');
+  const songId = iframe?.dataset.youtubeDurationSong;
+  const song = songId ? manager.getPlaylist(currentId)?.songs.find(item => item.id === songId) : undefined;
+  if (!iframe || !songId || !song || song.durationSeconds) return;
+  try {
+    const api = await loadYouTubeApi();
+    activeYouTubePlayer?.destroy();
+    activeYouTubePlayer = new api.Player(iframe, { events: { onReady: event => {
+      let attempts = 0;
+      const read = (): void => {
+        const seconds = event.target.getDuration();
+        if (seconds > 0 && currentId) {
+          manager.updateSongDuration(currentId, songId, seconds); void syncCurrentShare(); render(); return;
+        }
+        if (++attempts < 8) setTimeout(read, 500);
+      };
+      read();
+    } } });
+  } catch { /* Manual duration entry remains available. */ }
 }
 
 function closePlayer(): void {
@@ -535,6 +611,17 @@ function bindEvents(): void {
     const artist = row.querySelector<HTMLInputElement>('[data-field="artist"]')!.value;
     try { manager.updateSong(currentId, input.dataset.song!, { title, artist }); void syncCurrentShare(); }
     catch (error) { showError(error); }
+  }));
+  app.querySelectorAll<HTMLInputElement>('[data-duration-song]').forEach(input => input.addEventListener('change', () => {
+    if (!currentId || sharedPlaylist) return;
+    const seconds = parseDuration(input.value);
+    if (input.value.trim() && !seconds) {
+      notice = 'Enter a track length as minutes and seconds, such as 3:45.'; noticeKind = 'error'; render(); return;
+    }
+    try {
+      manager.updateSongDuration(currentId, input.dataset.durationSong!, seconds);
+      notice = seconds ? 'Track length updated.' : 'Track length cleared.'; noticeKind = 'success'; void syncCurrentShare(); render();
+    } catch (error) { showError(error); }
   }));
   app.querySelectorAll<HTMLElement>('[data-remove]').forEach(el => el.addEventListener('click', () => {
     if (!currentId) return;

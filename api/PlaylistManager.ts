@@ -46,6 +46,13 @@ export class PlaylistManager {
     song.title = updates.title.trim() || 'Untitled track'; song.artist = updates.artist.trim(); this.save();
   }
 
+  updateSongDuration(playlistId: string, songId: string, durationSeconds?: number): void {
+    const song = this.requirePlaylist(playlistId).songs.find(item => item.id === songId);
+    if (!song) throw new Error('That track is no longer in this playlist.');
+    song.durationSeconds = durationSeconds && durationSeconds > 0 ? Math.round(durationSeconds) : undefined;
+    this.save();
+  }
+
   removeSong(playlistId: string, songId: string): void {
     const playlist = this.requirePlaylist(playlistId); playlist.songs = playlist.songs.filter(song => song.id !== songId); this.save();
   }
