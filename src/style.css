@@ -19,9 +19,11 @@
 .cassette-screw{position:absolute;top:15px;width:7px;height:7px;border-radius:50%;background:#6ff1ed;box-shadow:inset 0 1px 1px #fff,0 0 5px #2fe0df}
 .screw-a{left:17px}.screw-b{right:17px}
 .cassette-window{position:absolute;z-index:3;left:50%;top:17px;transform:translateX(-50%);width:142px;height:51px;border:5px solid #36d9df;border-radius:9px;background:#12102f;display:flex;align-items:center;justify-content:space-around;box-shadow:inset 0 0 14px #05030f,0 0 8px #43dfe08c;overflow:hidden}
-.cassette-window .tape-reel{position:relative;z-index:2;display:block;flex:0 0 36px;width:36px;height:36px;aspect-ratio:1;border:3px solid #ffc08a;border-radius:50%;background:conic-gradient(from 12deg,#6c302d,#b65a43 12%,#6c302d 24%,#c26b4d 36%,#6c302d 48%,#b65a43 60%,#6c302d 72%,#c26b4d 84%,#6c302d),repeating-radial-gradient(circle,#71342f 0 2px,#9e4939 3px 4px);box-shadow:0 0 0 2px #160d29,0 0 8px #ff936b99}
-.cassette-window .tape-reel:before{content:'';position:absolute;inset:7px;border:3px solid #72f0eb;border-radius:50%;background:conic-gradient(#fff1a8 0 12%,#3f235b 13% 28%,#fff1a8 29% 45%,#3f235b 46% 61%,#fff1a8 62% 78%,#3f235b 79% 94%,#fff1a8 95%);box-shadow:0 0 4px #4ce5e0}
-.cassette-window .tape-reel:after{content:'';position:absolute;inset:13px;border-radius:50%;background:#201337;box-shadow:0 0 0 2px #fff1a8}
+.cassette-window .tape-reel{position:relative;z-index:2;display:block;aspect-ratio:1;border:1px solid #4a4054;border-radius:50%;background:repeating-radial-gradient(circle,#07060b 0 2px,#17131c 3px 4px,#050408 5px 6px);box-shadow:0 0 0 2px #0b0913,0 0 7px #000b}
+.cassette-window .reel-left{flex:0 0 40px;width:40px;height:40px}
+.cassette-window .reel-right{flex:0 0 28px;width:28px;height:28px}
+.cassette-window .tape-reel:before{content:'';position:absolute;inset:27%;border:2px solid #72f0eb;border-radius:50%;background:conic-gradient(#fff1a8 0 12%,#3f235b 13% 28%,#fff1a8 29% 45%,#3f235b 46% 61%,#fff1a8 62% 78%,#3f235b 79% 94%,#fff1a8 95%);box-shadow:0 0 4px #4ce5e0}
+.cassette-window .tape-reel:after{content:'';position:absolute;inset:43%;border-radius:50%;background:#201337;box-shadow:0 0 0 1px #fff1a8}
 .cassette-label{position:absolute;z-index:2;left:17px;right:17px;top:72px;height:58px;padding:6px 11px;background:#fff;border:1px solid #222;border-radius:2px;display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:3px;color:#181818;box-shadow:0 2px 6px #34124255}
 .cassette-label:before{content:none}
 .cassette-label b{position:relative;z-index:1;width:100%;padding:0 1px 2px;border-bottom:1px solid #222;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:800 13px/1.05 'DM Sans',sans-serif;letter-spacing:.02em}.cassette-label span{position:relative;z-index:1;width:100%;padding:0 1px 2px;border-bottom:1px solid #222;font:600 9px/1.2 'DM Sans',sans-serif}
