@@ -25,7 +25,8 @@
 .cassette-label b{font:700 11px var(--mono);letter-spacing:.2em}.cassette-label span{font:italic 10px var(--serif)}
 .cassette-holes{position:absolute;left:32px;right:32px;bottom:12px;display:flex;justify-content:space-between}
 .cassette-holes i{width:8px;height:8px;border-radius:50%;background:#69445f;box-shadow:inset 0 1px #ffffff60}
-.cassette-brand{position:absolute;right:17px;top:22px;color:#704563;font:7px var(--mono);letter-spacing:.08em}
+.cassette-brand{position:absolute;right:17px;top:20px;display:flex;flex-direction:column;align-items:flex-end;gap:3px;color:#704563;font:7px/1 var(--mono);letter-spacing:.12em}
+.cassette-brand span:last-child{font-size:6px;letter-spacing:.08em}
 .theme-art-mixtape .theme-art-caption{color:#ffd5dd}.theme-art-mixtape .theme-art-caption:before{content:'✳  '}
 .theme-cover-mixtape{background:radial-gradient(ellipse at 50% 40%,#a5507e,#542546 78%)}
 .theme-cover-mixtape .cover-label{color:#f7d4dd}
