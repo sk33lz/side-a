@@ -22,9 +22,9 @@
 .cassette-window .tape-reel{position:relative;z-index:2;display:block;flex:0 0 36px;width:36px;height:36px;aspect-ratio:1;border:3px solid #ffc08a;border-radius:50%;background:conic-gradient(from 12deg,#6c302d,#b65a43 12%,#6c302d 24%,#c26b4d 36%,#6c302d 48%,#b65a43 60%,#6c302d 72%,#c26b4d 84%,#6c302d),repeating-radial-gradient(circle,#71342f 0 2px,#9e4939 3px 4px);box-shadow:0 0 0 2px #160d29,0 0 8px #ff936b99}
 .cassette-window .tape-reel:before{content:'';position:absolute;inset:7px;border:3px solid #72f0eb;border-radius:50%;background:conic-gradient(#fff1a8 0 12%,#3f235b 13% 28%,#fff1a8 29% 45%,#3f235b 46% 61%,#fff1a8 62% 78%,#3f235b 79% 94%,#fff1a8 95%);box-shadow:0 0 4px #4ce5e0}
 .cassette-window .tape-reel:after{content:'';position:absolute;inset:13px;border-radius:50%;background:#201337;box-shadow:0 0 0 2px #fff1a8}
-.cassette-label{position:absolute;z-index:2;left:17px;right:17px;top:72px;height:58px;padding:7px 12px 6px;background-color:#fff;background-image:linear-gradient(#222,#222),linear-gradient(#222,#222);background-position:12px 25px,12px 47px;background-size:calc(100% - 24px) 1px;background-repeat:no-repeat;border:1px solid #222;border-radius:2px;display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;gap:6px;color:#181818;box-shadow:0 2px 6px #34124255}
+.cassette-label{position:absolute;z-index:2;left:17px;right:17px;top:72px;height:58px;padding:6px 11px;background:#fff;border:1px solid #222;border-radius:2px;display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:3px;color:#181818;box-shadow:0 2px 6px #34124255}
 .cassette-label:before{content:none}
-.cassette-label b{position:relative;z-index:1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:800 13px/1.05 'DM Sans',sans-serif;letter-spacing:.02em}.cassette-label span{position:relative;z-index:1;max-width:100%;font:600 9px/1.2 'DM Sans',sans-serif}
+.cassette-label b{position:relative;z-index:1;width:100%;padding:0 1px 2px;border-bottom:1px solid #222;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:800 13px/1.05 'DM Sans',sans-serif;letter-spacing:.02em}.cassette-label span{position:relative;z-index:1;width:100%;padding:0 1px 2px;border-bottom:1px solid #222;font:600 9px/1.2 'DM Sans',sans-serif}
 .cassette-holes{position:absolute;z-index:4;left:32px;right:32px;bottom:12px;display:flex;justify-content:space-between}
 .cassette-holes i{width:8px;height:8px;border-radius:50%;background:#261641;box-shadow:inset 0 1px #9afaf4}
 .cassette-brand{position:absolute;z-index:4;right:10px;top:31px;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:45px;padding:4px 3px 3px;border:1px solid #68e9e1;border-radius:3px;background:#21143ee8;color:#fff1a8;font:7px/1 var(--mono);letter-spacing:.12em}
@@ -238,9 +238,9 @@ body,.topbar,.sidebar,.footer,.button,.playlist-cover,.track-row{transition:back
 /* Keep the cover lettering readable at the smaller share-card size. */
 .theme-cover-mixtape .cassette-scene.scene-small{transform:scale(.82)}
 .theme-cover-mixtape .cassette-art{right:28px;bottom:29px}
-.theme-cover .cassette-label{left:14px;right:14px;top:65px;height:64px;padding:8px 12px 6px 25px;gap:5px}
+.theme-cover .cassette-label{left:14px;right:14px;top:65px;height:64px;padding:7px 11px 6px;gap:3px}
 .theme-cover .cassette-label b{max-width:215px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px;line-height:1;letter-spacing:.04em}
-.theme-cover .cassette-label span{max-width:215px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font:600 10px/1.2 'DM Sans',sans-serif;text-align:left;color:#50215f}
+.theme-cover .cassette-label span{max-width:215px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font:600 10px/1.2 'DM Sans',sans-serif;text-align:left;color:#181818}
 .theme-cover .cassette-brand{top:29px;font-size:9px;font-weight:700;color:#54324d}
 .theme-cover .cassette-brand span:last-child{font-size:8px}
 .theme-cover .cd-marker{font-size:17px;font-weight:600;color:#354f62}
@@ -271,7 +271,7 @@ body,.topbar,.sidebar,.footer,.button,.playlist-cover,.track-row{transition:back
 .playlist-cover.has-dedication .scene-small{transform:translateX(145px) scale(.68)}
 .theme-cover-mixtape.has-dedication .cassette-scene.scene-small{transform:translateX(135px) scale(.94)}
 .theme-cover-mixtape.has-dedication .cassette-art{right:28px;bottom:29px}
-.theme-cover-mixtape .cassette-label{top:65px;height:64px;padding:8px 12px 6px 25px}
+.theme-cover-mixtape .cassette-label{top:65px;height:64px;padding:7px 11px 6px}
 .theme-cover-mixtape .cassette-label b{font-size:17px}
 .theme-cover-mixtape .cassette-label span{max-width:225px;font:600 12px/1.2 'DM Sans',sans-serif}
 
