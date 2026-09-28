@@ -18,12 +18,13 @@
 .cassette-art:before{content:'';position:absolute;inset:8px;border:1px solid #51e4e2a6;border-radius:8px}
 .cassette-screw{position:absolute;top:15px;width:7px;height:7px;border-radius:50%;background:#6ff1ed;box-shadow:inset 0 1px 1px #fff,0 0 5px #2fe0df}
 .screw-a{left:17px}.screw-b{right:17px}
-.cassette-window{position:absolute;z-index:3;left:50%;top:17px;transform:translateX(-50%);width:142px;height:51px;border:5px solid #36d9df;border-radius:9px;background:#12102f;display:flex;align-items:center;justify-content:space-around;box-shadow:inset 0 0 14px #05030f,0 0 8px #43dfe08c;overflow:hidden}
-.cassette-window .tape-reel{position:relative;z-index:2;display:block;aspect-ratio:1;border:1px solid #4a4054;border-radius:50%;background:repeating-radial-gradient(circle,#07060b 0 2px,#17131c 3px 4px,#050408 5px 6px);box-shadow:0 0 0 2px #0b0913,0 0 7px #000b}
-.cassette-window .reel-left{flex:0 0 40px;width:40px;height:40px}
-.cassette-window .reel-right{flex:0 0 28px;width:28px;height:28px}
-.cassette-window .tape-reel:before{content:'';position:absolute;inset:27%;border:2px solid #72f0eb;border-radius:50%;background:conic-gradient(#fff1a8 0 12%,#3f235b 13% 28%,#fff1a8 29% 45%,#3f235b 46% 61%,#fff1a8 62% 78%,#3f235b 79% 94%,#fff1a8 95%);box-shadow:0 0 4px #4ce5e0}
-.cassette-window .tape-reel:after{content:'';position:absolute;inset:43%;border-radius:50%;background:#201337;box-shadow:0 0 0 1px #fff1a8}
+.cassette-window{position:absolute;z-index:3;left:50%;top:17px;transform:translateX(-50%);width:142px;height:51px;padding:4px 6px;border:5px solid #36d9df;border-radius:9px;background:#0a0911;display:grid;grid-template-columns:29px 1fr 1fr 29px;align-items:center;gap:2px;box-shadow:inset 0 0 14px #05030f,0 0 8px #43dfe08c;overflow:hidden}
+.cassette-window .tape-reel{position:relative;z-index:3;display:block;width:29px;height:29px;border:2px solid #d7d8d5;border-radius:50%;background:repeating-conic-gradient(from 0deg,#d7d8d5 0 7deg,#5d6265 8deg 15deg);box-shadow:0 0 0 2px #25232d,0 0 4px #000}
+.cassette-window .tape-reel:before{content:'';position:absolute;inset:5px;border-radius:50%;background:#24242a;box-shadow:inset 0 0 0 2px #aeb3b3}
+.cassette-window .tape-reel:after{content:'';position:absolute;inset:10px;border-radius:50%;background:#d9dad6;box-shadow:0 0 0 2px #4d5153}
+.cassette-window .tape-pack{position:relative;z-index:1;display:block;height:31px;background:repeating-linear-gradient(90deg,#050405 0 2px,#1a1110 3px 4px,#080506 5px 6px);box-shadow:inset 0 0 0 1px #352321,0 0 5px #000;border-radius:45% 18% 18% 45%/50%}
+.cassette-window .tape-pack-left{width:31px;justify-self:end}
+.cassette-window .tape-pack-right{width:20px;justify-self:start;transform:scaleX(-1)}
 .cassette-label{position:absolute;z-index:2;left:17px;right:17px;top:72px;height:58px;padding:6px 11px;background:#fff;border:1px solid #222;border-radius:2px;display:flex;flex-direction:column;justify-content:flex-start;align-items:stretch;gap:3px;color:#181818;box-shadow:0 2px 6px #34124255}
 .cassette-label:before{content:none}
 .cassette-label b{position:relative;z-index:1;width:100%;padding:0 1px 2px;border-bottom:1px solid #222;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:800 13px/1.05 'DM Sans',sans-serif;letter-spacing:.02em}.cassette-label span{position:relative;z-index:1;width:100%;padding:0 1px 2px;border-bottom:1px solid #222;font:600 9px/1.2 'DM Sans',sans-serif}
