@@ -33,7 +33,7 @@ let playerPlaylistId: string | null = null;
 let buttonAudio: AudioContext | null = null;
 let currentShareId: string | null = null;
 let senderOrder: string[] = [];
-type ReactionSummary = { likes: number; dislikes: number; mine: -1 | 0 | 1 };
+type ReactionSummary = { likes: number; dislikes: number; mine: -1 | 0 | 1; latest: -1 | 0 | 1 };
 let reactions: Record<string, ReactionSummary> = {};
 let youtubeApiPromise: Promise<YouTubeApi> | null = null;
 let activeYouTubePlayer: YouTubePlayer | null = null;
@@ -112,9 +112,12 @@ async function loadReactions(shareId: string): Promise<void> {
   try {
     const response = await fetch(`/api/playlists/${encodeURIComponent(shareId)}/reactions?voter=${encodeURIComponent(voterId())}`);
     if (!response.ok) return;
-    const result = await response.json() as { reactions?: Array<{ song_id: string; likes: number; dislikes: number; mine: number }> };
+    const result = await response.json() as { reactions?: Array<{ song_id: string; likes: number; dislikes: number; mine: number; latest: number }> };
     reactions = Object.fromEntries((result.reactions ?? []).map(item => [item.song_id, {
-      likes: Number(item.likes) || 0, dislikes: Number(item.dislikes) || 0, mine: item.mine === 1 ? 1 : item.mine === -1 ? -1 : 0,
+      likes: Number(item.likes) || 0,
+      dislikes: Number(item.dislikes) || 0,
+      mine: item.mine === 1 ? 1 : item.mine === -1 ? -1 : 0,
+      latest: item.latest === 1 ? 1 : item.latest === -1 ? -1 : 0,
     }]));
     render();
   } catch { /* Reactions are supplementary; keep the playlist usable offline. */ }
@@ -290,7 +293,7 @@ function render(): void {
       </main>
       <footer class="footer"><span>Music links, all in one place.</span><span>Made for sharing <span class="heart">♥</span></span></footer>
       <dialog id="create-dialog" class="dialog"><form id="create-form"><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">START A COLLECTION</span><h2>Make something for someone.</h2><p>Name the mix, personalize it, then choose the format that fits its feeling.</p><label for="playlist-name">Mix name</label><input id="playlist-name" name="name" maxlength="60" placeholder="Sunday morning, road trip…" required autofocus><div class="personal-fields"><label>Made for<input name="recipient" maxlength="40" placeholder="Their name"></label><label>Made by<input name="sender" maxlength="40" placeholder="Your name"></label><label class="dedication-field">Short dedication<input name="dedication" maxlength="140" placeholder="A few words just for them"></label></div><fieldset class="format-picker"><legend>Choose a format</legend>${themes.map(theme => `<label><input type="radio" name="theme" value="${theme}" ${currentTheme === theme ? 'checked' : ''}>${formatLogo(theme, true)}</label>`).join('')}</fieldset><div class="dialog-actions"><button type="button" class="button button-quiet" data-close>Cancel</button><button class="button button-dark" type="submit">Create mix <span>→</span></button></div></form></dialog>
-      <dialog id="add-dialog" class="dialog"><form id="add-form"><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">ADD TO YOUR PLAYLIST</span><h2>Bring a track along.</h2><p>Paste one link or a whole list, with one URL on each line.</p><label for="song-urls">Track links</label><textarea id="song-urls" name="urls" rows="6" placeholder="https://open.spotify.com/track/…&#10;https://youtu.be/…" required></textarea><span class="field-hint">YouTube · Spotify · SoundCloud · Apple Music · Tidal</span><div class="dialog-actions"><button type="button" class="button button-quiet" data-close>Cancel</button><button class="button button-dark" type="submit">Add tracks <span>→</span></button></div></form></dialog>
+      <dialog id="add-dialog" class="dialog"><form id="add-form"><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">ADD TO YOUR PLAYLIST</span><h2>Bring a track along.</h2><p>Paste a YouTube playlist or add individual music links, with one URL on each line.</p><label for="song-urls">Track or playlist links</label><textarea id="song-urls" name="urls" rows="6" placeholder="https://youtube.com/playlist?list=…&#10;https://open.spotify.com/track/…" required></textarea><span class="field-hint">YouTube playlists · YouTube · Spotify · SoundCloud · Apple Music · Tidal</span><div class="dialog-actions"><button type="button" class="button button-quiet" data-close>Cancel</button><button class="button button-dark" type="submit">Add tracks <span>→</span></button></div></form></dialog>
       <input type="file" id="import-file" accept="application/json,.json" hidden>
     </div>`;
   bindEvents();
@@ -376,14 +379,19 @@ function trackRow(song: Song, index: number, readonly: boolean, playlistLength: 
   const embed = songEmbed(song);
   const active = playerOpen && playerTrackId === song.id;
   const reorderable = !readonly || !!currentShareId;
-  const reaction = reactions[song.id] ?? { likes: 0, dislikes: 0, mine: 0 };
+  const reaction = reactions[song.id] ?? { likes: 0, dislikes: 0, mine: 0, latest: 0 };
+  const ownerReaction = reaction.latest === 1
+    ? '<div class="reaction-status reaction-liked" aria-label="Recipient liked this track"><span aria-hidden="true">👍</span> Liked</div>'
+    : reaction.latest === -1
+      ? '<div class="reaction-status reaction-disliked" aria-label="Recipient did not like this track"><span aria-hidden="true">👎</span> Not for me</div>'
+      : '<div class="reaction-status reaction-pending" aria-label="No recipient reaction yet"><span aria-hidden="true">○</span> No reaction yet</div>';
   const feedback = currentShareId
-    ? `<div class="reaction-buttons" role="group" aria-label="Your reaction to ${escapeHtml(song.title)}"><span class="reaction-label">YOUR VOTE</span><button class="reaction-button reaction-up ${reaction.mine === 1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="1" aria-label="Like ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === 1}"><b>👍</b><span>Like · ${reaction.likes}</span></button><button class="reaction-button reaction-down ${reaction.mine === -1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="-1" aria-label="Dislike ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === -1}"><b>👎</b><span>Not for me · ${reaction.dislikes}</span></button></div>`
-    : (!readonly && currentId && shareKeys()[currentId]) ? `<div class="reaction-counts" aria-label="Recipient reactions">👍 ${reaction.likes} · 👎 ${reaction.dislikes}</div>` : '';
+    ? `<div class="reaction-buttons" role="group" aria-label="Your reaction to ${escapeHtml(song.title)}"><span class="reaction-label">DID YOU LIKE IT?</span><button class="reaction-button reaction-up ${reaction.mine === 1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="1" aria-label="Like ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === 1}"><b aria-hidden="true">👍</b><span>Like</span></button><button class="reaction-button reaction-down ${reaction.mine === -1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="-1" aria-label="Dislike ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === -1}"><b aria-hidden="true">👎</b><span>Not for me</span></button></div>`
+    : (!readonly && currentId && shareKeys()[currentId]) ? ownerReaction : '';
   const durationControl = readonly
     ? (song.durationSeconds ? `<span class="track-duration">${formatDuration(song.durationSeconds)}</span>` : '')
     : `<label class="duration-editor">Length <input data-duration-song="${escapeHtml(song.id)}" value="${formatDuration(song.durationSeconds)}" placeholder="3:45" inputmode="numeric" aria-label="Length of ${escapeHtml(song.title)} in minutes and seconds"></label>`;
-  const actions = reorderable ? `<div class="track-actions"><button class="icon-button move-track" data-move="${escapeHtml(song.id)}" data-offset="-1" aria-label="Move ${escapeHtml(song.title)} up" ${index === 0 ? 'disabled' : ''}>↑</button><button class="icon-button move-track" data-move="${escapeHtml(song.id)}" data-offset="1" aria-label="Move ${escapeHtml(song.title)} down" ${index === playlistLength - 1 ? 'disabled' : ''}>↓</button>${!readonly ? `<button class="icon-button remove-track" data-remove="${escapeHtml(song.id)}" aria-label="Remove ${escapeHtml(song.title)}">×</button>` : ''}</div>` : '<span></span>';
+  const actions = reorderable ? `<div class="track-actions"><button class="icon-button move-track" data-move="${escapeHtml(song.id)}" data-offset="-1" aria-label="Move ${escapeHtml(song.title)} up" ${index === 0 ? 'disabled' : ''}>↑</button><button class="icon-button move-track" data-move="${escapeHtml(song.id)}" data-offset="1" aria-label="Move ${escapeHtml(song.title)} down" ${index === playlistLength - 1 ? 'disabled' : ''}>↓</button>${!readonly ? `<button class="icon-button remove-track" data-remove="${escapeHtml(song.id)}" aria-label="Remove ${escapeHtml(song.title)}">×</button>` : ''}</div>` : '<span class="track-actions-spacer"></span>';
   return `<div class="track-item ${active ? 'is-playing' : ''}"><article class="track-row" data-track="${escapeHtml(song.id)}" ${reorderable ? 'draggable="true"' : ''}><span class="track-number">${reorderable ? '<i class="drag-grip" aria-hidden="true">⠿</i>' : ''}<b>${String(index + 1).padStart(2, '0')}</b></span><div class="track-details"><div class="track-icon ${song.source.toLowerCase().replace(/\s/g, '-')}" aria-hidden="true">${artwork ? `<img src="${escapeHtml(artwork)}" alt="" loading="lazy" decoding="async">` : song.source === 'YouTube' ? '▶' : song.source === 'Spotify' ? '◉' : song.source === 'Apple Music' ? '♫' : song.source === 'Tidal' ? '▦' : '☁'}</div><div class="track-text"><textarea class="song-title" data-song="${escapeHtml(song.id)}" data-field="title" aria-label="Track title" rows="1" ${readonly ? 'readonly' : ''}>${escapeHtml(song.title)}</textarea><input class="song-artist" data-song="${escapeHtml(song.id)}" data-field="artist" aria-label="Artist" placeholder="Add artist name" value="${escapeHtml(song.artist)}" ${readonly ? 'readonly' : ''}>${durationControl}${feedback}</div></div><span class="service-name">${escapeHtml(song.source)}</span>${embed ? `<button class="link-button play-track" data-play-track="${escapeHtml(song.id)}" aria-label="Play ${escapeHtml(song.title)}">${active ? '●' : '▶'} <span>${active ? 'Playing' : 'Play'}</span></button>` : `<a class="link-button" href="${escapeHtml(song.url)}" target="_blank" rel="noreferrer" title="Open track link">↗ <span>Open</span></a>`}${actions}</article></div>`;
 }
 
@@ -594,24 +602,37 @@ function bindEvents(): void {
     notice = 'Personalization updated.'; void syncCurrentShare(); render();
   }));
   app.querySelector<HTMLFormElement>('#add-form')?.addEventListener('submit', async event => {
-    event.preventDefault(); const data = new FormData(event.currentTarget as HTMLFormElement); const playlist = currentPlaylist();
+    event.preventDefault();
+    const form = event.currentTarget as HTMLFormElement;
+    const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const data = new FormData(form); const playlist = currentPlaylist();
     if (!playlist || sharedPlaylist) return;
     const lines = String(data.get('urls') ?? '').split(/[\r\n]+/).map(line => line.trim()).filter(Boolean);
     if (!lines.length) { showError(new Error('Paste at least one music link.')); return; }
+    if (submit) { submit.disabled = true; submit.innerHTML = 'Adding…'; }
     const added: Song[] = [];
-    const rejected: string[] = [];
+    const rejected: Array<{ line: string; message: string }> = [];
+    let truncated = false;
     const results = await Promise.all(lines.map(async line => {
-      try { return { line, song: await ingestion.ingestSongFromLink(line) }; }
-      catch { return { line, song: null }; }
+      try { return { line, result: await ingestion.ingestSongsFromLink(line), error: '' }; }
+      catch (error) { return { line, result: null, error: error instanceof Error ? error.message : 'This link could not be imported.' }; }
     }));
-    results.forEach(result => result.song ? added.push(result.song) : rejected.push(result.line));
-    if (!added.length) { showError(new Error('No supported music links found. Check the URLs and try again.')); return; }
-    added.forEach(song => manager.addSong(playlist.id, song));
+    results.forEach(({ line, result, error }) => {
+      if (result) { added.push(...result.songs); truncated ||= !!result.truncated; }
+      else rejected.push({ line, message: error });
+    });
+    if (!added.length) {
+      if (submit) { submit.disabled = false; submit.innerHTML = 'Add tracks <span>→</span>'; }
+      showError(new Error(rejected[0]?.message ?? 'No supported music links found. Check the URLs and try again.')); return;
+    }
+    manager.addSongs(playlist.id, added);
     void syncCurrentShare();
-    notice = rejected.length
-      ? `Added ${added.length} ${added.length === 1 ? 'track' : 'tracks'}; skipped ${rejected.length} unsupported ${rejected.length === 1 ? 'link' : 'links'}.`
-      : `Added ${added.length} ${added.length === 1 ? 'track' : 'tracks'} with available details filled in.`;
-    noticeKind = rejected.length ? 'error' : 'success';
+    notice = truncated
+      ? `Added the first ${added.length} tracks. This playlist is larger than the 500-track import limit.`
+      : rejected.length
+        ? `Added ${added.length} ${added.length === 1 ? 'track' : 'tracks'}; skipped ${rejected.length} ${rejected.length === 1 ? 'link' : 'links'}.`
+        : `Added ${added.length} ${added.length === 1 ? 'track' : 'tracks'} with available details filled in.`;
+    noticeKind = truncated || rejected.length ? 'error' : 'success';
     (document.querySelector<HTMLDialogElement>('#add-dialog')!).close(); render();
   });
   app.querySelectorAll<HTMLTextAreaElement>('.song-title').forEach(textarea => {

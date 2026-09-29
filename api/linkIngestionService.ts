@@ -1,5 +1,11 @@
 import type { Song, SongSource } from './models';
 
+export interface LinkIngestionResult {
+  songs: Song[];
+  playlistTitle?: string;
+  truncated?: boolean;
+}
+
 const sources: Array<{ source: SongSource; hosts: string[] }> = [
   { source: 'YouTube', hosts: ['youtube.com', 'youtu.be'] },
   { source: 'Spotify', hosts: ['spotify.com'] },
@@ -13,6 +19,25 @@ function matchesHost(hostname: string, allowed: string): boolean {
 }
 
 export class LinkIngestionService {
+  async ingestSongsFromLink(input: string): Promise<LinkIngestionResult> {
+    const clean = input.trim();
+    let url: URL;
+    try { url = new URL(clean); }
+    catch { throw new Error('Enter a complete link starting with https://.'); }
+
+    const hostname = url.hostname.toLowerCase();
+    const isYouTube = ['youtube.com', 'youtu.be'].some(host => matchesHost(hostname, host));
+    const isPlaylist = isYouTube && url.pathname.replace(/\/+$/, '') === '/playlist' && url.searchParams.has('list');
+    if (!isPlaylist) return { songs: [await this.ingestSongFromLink(clean)] };
+
+    const response = await fetch(`/api/youtube-playlist?url=${encodeURIComponent(url.href)}`);
+    const result = await response.json().catch(() => null) as { songs?: Song[]; title?: string; truncated?: boolean; error?: string } | null;
+    if (!response.ok || !result?.songs?.length) {
+      throw new Error(result?.error ?? 'That YouTube playlist could not be imported.');
+    }
+    return { songs: result.songs, playlistTitle: result.title, truncated: result.truncated };
+  }
+
   async ingestSongFromLink(input: string): Promise<Song> {
     let url: URL;
     try {

@@ -20,12 +20,15 @@ async function ensureSchema(env: Env): Promise<void> {
 export const onRequestGet: PagesFunction<Env> = async ({ request, params, env }) => {
   await ensureSchema(env);
   const voterId = new URL(request.url).searchParams.get('voter') ?? '';
-  const result = await env.DB.prepare(`SELECT song_id,
-    SUM(CASE WHEN reaction = 1 THEN 1 ELSE 0 END) AS likes,
-    SUM(CASE WHEN reaction = -1 THEN 1 ELSE 0 END) AS dislikes,
-    MAX(CASE WHEN voter_id = ? THEN reaction ELSE 0 END) AS mine
-    FROM playlist_reactions WHERE playlist_id = ? GROUP BY song_id`)
-    .bind(voterId, params.id).all<{ song_id: string; likes: number; dislikes: number; mine: number }>();
+  const result = await env.DB.prepare(`SELECT pr.song_id,
+    SUM(CASE WHEN pr.reaction = 1 THEN 1 ELSE 0 END) AS likes,
+    SUM(CASE WHEN pr.reaction = -1 THEN 1 ELSE 0 END) AS dislikes,
+    MAX(CASE WHEN pr.voter_id = ? THEN pr.reaction ELSE 0 END) AS mine,
+    (SELECT latest.reaction FROM playlist_reactions latest
+      WHERE latest.playlist_id = pr.playlist_id AND latest.song_id = pr.song_id
+      ORDER BY latest.updated_at DESC, latest.rowid DESC LIMIT 1) AS latest
+    FROM playlist_reactions pr WHERE pr.playlist_id = ? GROUP BY pr.song_id`)
+    .bind(voterId, params.id).all<{ song_id: string; likes: number; dislikes: number; mine: number; latest: number }>();
   return json({ reactions: result.results ?? [] });
 };
 

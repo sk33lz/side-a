@@ -30,6 +30,11 @@ export class PlaylistManager {
 
   addSong(playlistId: string, song: Song): void { this.requirePlaylist(playlistId).songs.push(song); this.save(); }
 
+  addSongs(playlistId: string, songs: Song[]): void {
+    if (!songs.length) return;
+    this.requirePlaylist(playlistId).songs.push(...songs); this.save();
+  }
+
   updateTheme(playlistId: string, theme: PlaylistTheme): void { this.requirePlaylist(playlistId).theme = theme; this.save(); }
 
   updateDetails(playlistId: string, recipient: string, dedication: string, sender = ''): void {
