@@ -1,4 +1,6 @@
-interface Env { DB: D1Database }
+import { authenticatedUserId, type ClerkEnvironment } from '../../../api/clerkAuth';
+
+interface Env extends ClerkEnvironment { DB: D1Database }
 
 function json(data: unknown, status = 200): Response {
   return Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -26,6 +28,19 @@ export const onRequestGet: PagesFunction<Env> = async ({ params, env }) => {
 };
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, params, env }) => {
+  const userId = await authenticatedUserId(request, env);
+  if (userId) {
+    let ownerToken = '';
+    try {
+      const body = await request.json() as { ownerToken?: unknown };
+      if (typeof body.ownerToken === 'string') ownerToken = body.ownerToken;
+    } catch { /* A body is only required while claiming an existing share. */ }
+    if (ownerToken.length < 32) return json({ error: 'The private recovery key is required to claim this playlist.' }, 400);
+    const tokenHash = await hashToken(ownerToken);
+    const result = await env.DB.prepare(`UPDATE shared_playlists SET owner_user_id = ?, updated_at = datetime('now')
+      WHERE id = ? AND edit_token_hash = ?`).bind(userId, params.id, tokenHash).run();
+    return result.meta.changes ? json({ valid: true, claimed: true }) : json({ error: 'This recovery link is no longer valid.' }, 403);
+  }
   const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? '';
   if (token.length < 32) return json({ error: 'Owner access is required.' }, 401);
   const tokenHash = await hashToken(token);
@@ -35,8 +50,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, params, env }
 };
 
 export const onRequestPut: PagesFunction<Env> = async ({ request, params, env }) => {
-  const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? '';
-  if (token.length < 32) return json({ error: 'Edit access is required.' }, 401);
+  const userId = await authenticatedUserId(request, env);
+  const token = userId ? '' : request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+  if (!userId && token.length < 32) return json({ error: 'Edit access is required.' }, 401);
   let body: unknown;
   try { body = await request.json(); }
   catch { return json({ error: 'Invalid request.' }, 400); }
@@ -46,9 +62,12 @@ export const onRequestPut: PagesFunction<Env> = async ({ request, params, env })
   const playlist = (body as { playlist: { name: string; songs: unknown[]; createdAt?: string } }).playlist;
   const playlistJson = JSON.stringify(playlist);
   if (new TextEncoder().encode(playlistJson).length > 256_000) return json({ error: 'Playlist is too large.' }, 413);
-  const tokenHash = await hashToken(token);
-  const result = await env.DB.prepare(`UPDATE shared_playlists SET playlist_json = ?, updated_at = datetime('now')
-    WHERE id = ? AND edit_token_hash = ?`).bind(playlistJson, params.id, tokenHash).run();
+  const tokenHash = token ? await hashToken(token) : '';
+  const result = userId
+    ? await env.DB.prepare(`UPDATE shared_playlists SET playlist_json = ?, updated_at = datetime('now')
+      WHERE id = ? AND owner_user_id = ?`).bind(playlistJson, params.id, userId).run()
+    : await env.DB.prepare(`UPDATE shared_playlists SET playlist_json = ?, updated_at = datetime('now')
+      WHERE id = ? AND edit_token_hash = ?`).bind(playlistJson, params.id, tokenHash).run();
   if (!result.meta.changes) return json({ error: 'Edit access is invalid or the playlist no longer exists.' }, 403);
   return json({ ok: true });
 };

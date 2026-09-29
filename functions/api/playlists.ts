@@ -1,4 +1,6 @@
-interface Env { DB: D1Database }
+import { authenticatedUserId, type ClerkEnvironment } from '../../api/clerkAuth';
+
+interface Env extends ClerkEnvironment { DB: D1Database }
 
 function json(data: unknown, status = 200): Response {
   return Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -25,6 +27,7 @@ function validPlaylist(value: unknown): value is { name: string; songs: unknown[
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
+    const userId = await authenticatedUserId(request, env);
     const body: unknown = await request.json();
     if (!body || typeof body !== 'object' || !validPlaylist((body as { playlist?: unknown }).playlist)) {
       return json({ error: 'Invalid playlist.' }, 400);
@@ -35,8 +38,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const id = base64Url(crypto.getRandomValues(new Uint8Array(18)));
     const editToken = base64Url(crypto.getRandomValues(new Uint8Array(32)));
     const editTokenHash = await hashToken(editToken);
-    await env.DB.prepare('INSERT INTO shared_playlists (id, playlist_json, edit_token_hash) VALUES (?, ?, ?)')
-      .bind(id, playlistJson, editTokenHash).run();
+    await env.DB.prepare('INSERT INTO shared_playlists (id, playlist_json, edit_token_hash, owner_user_id) VALUES (?, ?, ?, ?)')
+      .bind(id, playlistJson, editTokenHash, userId).run();
     return json({ id, editToken }, 201);
   } catch {
     return json({ error: 'Could not create the shared playlist.' }, 500);

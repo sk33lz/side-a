@@ -18,11 +18,13 @@ export interface Playlist {
   name: string;
   songs: Song[];
   createdAt: string;
+  updatedAt?: string;
   theme?: PlaylistTheme;
   recipient?: string;
   sender?: string;
   dedication?: string;
   feedbackShareId?: string;
+  ownerShareId?: string;
 }
 
 export interface SharedPlaylist {

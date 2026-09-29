@@ -380,3 +380,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 @media(max-width:390px){
   .track-row{padding:12px}.track-details{grid-template-columns:82px minmax(0,1fr);gap:11px}.track-icon{width:82px;height:82px}.track-number{left:16px;top:16px}.song-title{font-size:14px}.song-artist{font-size:12px}.reaction-button b{font-size:12px}.reaction-button span{font-size:8px}
 }
+
+.account-user-button{display:flex;align-items:center;justify-content:center;width:34px;height:34px;flex:none;border:1px solid color-mix(in srgb,var(--green) 35%,var(--line));border-radius:50%;background:color-mix(in srgb,var(--green) 14%,var(--paper));color:var(--green);font:700 12px 'DM Sans',sans-serif;cursor:pointer}.account-user-button:hover{background:color-mix(in srgb,var(--green) 22%,var(--paper))}
+.account-sign-in{white-space:nowrap}
+.sidebar-bottom>div:last-child{min-width:0;max-width:165px}.sidebar-bottom strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-summary{display:flex;align-items:center;gap:13px;margin:20px 0}.account-summary .avatar{width:42px;height:42px;font-size:18px}.account-summary h2{margin:0;font:600 18px 'DM Sans',sans-serif;letter-spacing:-.3px}.account-summary p{margin:4px 0 0}.cloud-confirmation{display:grid;gap:4px;padding:13px;border:1px solid color-mix(in srgb,var(--green) 25%,var(--line));border-radius:6px;background:color-mix(in srgb,var(--green) 9%,var(--paper))}.cloud-confirmation b{color:var(--green);font-size:11px}.cloud-confirmation span{color:var(--muted);font-size:10px;line-height:1.5}
+@media(max-width:650px){.topbar .account-sign-in{margin-left:0;padding:0 10px}.account-user-button{width:32px;height:32px}}

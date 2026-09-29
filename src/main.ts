@@ -1,14 +1,26 @@
-import { PLAYLIST_STORAGE_KEY, PlaylistManager } from '../api/PlaylistManager';
+import { PLAYLIST_STORAGE_KEY, PlaylistManager, type LibraryChange } from '../api/PlaylistManager';
 import { LinkIngestionService } from '../api/linkIngestionService';
 import type { Playlist, PlaylistTheme, Song } from '../api/models';
 import './style.css';
 
 type YouTubePlayer = { getDuration(): number; destroy(): void };
 type YouTubeApi = { Player: new (element: HTMLIFrameElement, options: { events: { onReady(event: { target: YouTubePlayer }): void } }) => YouTubePlayer };
-declare global { interface Window { YT?: YouTubeApi; onYouTubeIframeAPIReady?: () => void } }
+type ClerkUser = { id: string; fullName: string | null; firstName: string | null; primaryEmailAddress?: { emailAddress: string } | null };
+type ClerkClient = {
+  isSignedIn: boolean;
+  user?: ClerkUser | null;
+  session?: { getToken(): Promise<string | null> } | null;
+  load(): Promise<void>;
+  addListener(listener: () => void): () => void;
+  redirectToSignIn(options?: { redirectUrl?: string }): Promise<unknown>;
+  redirectToUserProfile(): Promise<unknown>;
+  signOut(options?: { redirectUrl?: string }): Promise<unknown>;
+};
+declare global { interface Window { YT?: YouTubeApi; onYouTubeIframeAPIReady?: () => void; Clerk?: ClerkClient } }
 
 const manager = new PlaylistManager();
 const ingestion = new LinkIngestionService();
+const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 const createId = (): string => typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 let currentId: string | null = null;
 let sharedPlaylist: Playlist | null = null;
@@ -16,6 +28,9 @@ const SHARE_KEYS = 'side-a.share-keys.v1';
 const SHARED_ORDER_KEY = 'side-a.shared-order.v1';
 const VOTER_KEY = 'side-a.voter.v1';
 const THEME_KEY = 'side-a.theme.v1';
+const ACTIVE_LIBRARY_USER_KEY = 'side-a.active-library-user.v1';
+const GUEST_LIBRARY_KEY = 'side-a.guest-library.v1';
+const USER_LIBRARY_PREFIX = 'side-a.user-library.v1.';
 const themes = ['side-a', 'mixtape', 'cd-mix', 'playlist'] as const;
 type Theme = PlaylistTheme;
 const themeLabels: Record<Theme, string> = { 'side-a': 'Side A', mixtape: 'Mixtape', 'cd-mix': 'CD Mix', playlist: 'Playlist' };
@@ -40,6 +55,11 @@ let reactions: Record<string, ReactionSummary> = {};
 let plays: Record<string, number> = {};
 let youtubeApiPromise: Promise<YouTubeApi> | null = null;
 let activeYouTubePlayer: YouTubePlayer | null = null;
+let clerk: ClerkClient | null = null;
+let authLoading = !!clerkPublishableKey;
+let authError = false;
+let observedUserId: string | null | undefined;
+let cloudSyncQueue: Promise<void> = Promise.resolve();
 
 function isTheme(value: unknown): value is Theme { return typeof value === 'string' && themes.includes(value as Theme); }
 
@@ -137,7 +157,8 @@ async function loadPlays(shareId: string): Promise<void> {
 }
 
 function loadOwnerReactions(playlistId: string): void {
-  const shareId = shareKeys()[playlistId]?.id ?? manager.getPlaylist(playlistId)?.feedbackShareId;
+  const playlist = manager.getPlaylist(playlistId);
+  const shareId = shareKeys()[playlistId]?.id ?? playlist?.ownerShareId ?? playlist?.feedbackShareId;
   reactions = {};
   plays = {};
   if (shareId) { void loadReactions(shareId); void loadPlays(shareId); }
@@ -193,6 +214,143 @@ function isSong(value: unknown): value is Song {
   const song = value as Partial<Song>;
   return typeof song.id === 'string' && typeof song.title === 'string' && typeof song.artist === 'string' &&
     typeof song.url === 'string' && ['YouTube', 'Spotify', 'SoundCloud', 'Apple Music', 'Tidal'].includes(song.source ?? '');
+}
+
+function isPlaylist(value: unknown): value is Playlist {
+  if (!value || typeof value !== 'object') return false;
+  const playlist = value as Partial<Playlist>;
+  return typeof playlist.id === 'string' && typeof playlist.name === 'string' &&
+    typeof playlist.createdAt === 'string' && Array.isArray(playlist.songs) && playlist.songs.every(isSong);
+}
+
+function playlistUpdatedAt(playlist: Playlist): string { return playlist.updatedAt ?? playlist.createdAt; }
+
+function switchLocalLibrary(userId: string | null): void {
+  try {
+    const previousUserId = localStorage.getItem(ACTIVE_LIBRARY_USER_KEY);
+    if (previousUserId === userId) return;
+    const currentJson = localStorage.getItem(PLAYLIST_STORAGE_KEY) ?? '[]';
+    if (previousUserId) localStorage.setItem(`${USER_LIBRARY_PREFIX}${previousUserId}`, currentJson);
+    else localStorage.setItem(GUEST_LIBRARY_KEY, currentJson);
+    const nextJson = userId ? localStorage.getItem(`${USER_LIBRARY_PREFIX}${userId}`) ?? (previousUserId ? '[]' : currentJson)
+      : localStorage.getItem(GUEST_LIBRARY_KEY) ?? '[]';
+    localStorage.setItem(PLAYLIST_STORAGE_KEY, nextJson);
+    if (userId) localStorage.setItem(ACTIVE_LIBRARY_USER_KEY, userId);
+    else localStorage.removeItem(ACTIVE_LIBRARY_USER_KEY);
+    manager.reload();
+    currentId = manager.getPlaylist(currentId ?? '')?.id ?? manager.listPlaylists()[0]?.id ?? null;
+  } catch { /* Cloud storage remains authoritative if browser storage is unavailable. */ }
+}
+
+async function authFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const token = await clerk?.session?.getToken();
+  if (!token) throw new Error('Sign in is required.');
+  const headers = new Headers(init.headers);
+  headers.set('Authorization', `Bearer ${token}`);
+  return fetch(input, { ...init, headers });
+}
+
+function queueCloudChange(change: LibraryChange): void {
+  if (!clerk?.isSignedIn) return;
+  cloudSyncQueue = cloudSyncQueue.then(async () => {
+    const url = `/api/library/${encodeURIComponent(change.type === 'upsert' ? change.playlist.id : change.id)}`;
+    const response = change.type === 'upsert'
+      ? await authFetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playlist: change.playlist }) })
+      : await authFetch(url, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deletedAt: change.deletedAt }) });
+    if (!response.ok) throw new Error('Cloud save failed.');
+  }).catch(() => {
+    notice = 'This change is still saved on this device, but cloud saving is temporarily unavailable.';
+    noticeKind = 'error'; render();
+  });
+}
+
+async function reconcileCloudLibrary(): Promise<void> {
+  const response = await authFetch('/api/library');
+  if (!response.ok) throw new Error('Could not load your cloud library.');
+  const result = await response.json() as { items?: Array<{ id?: unknown; playlist?: unknown; updatedAt?: unknown; deletedAt?: unknown }> };
+  const remoteItems = result.items ?? [];
+  const local = new Map(manager.listPlaylists().map(playlist => [playlist.id, playlist]));
+  const remoteIds = new Set<string>();
+  const pendingUploads: Playlist[] = [];
+
+  for (const item of remoteItems) {
+    if (typeof item.id !== 'string') continue;
+    remoteIds.add(item.id);
+    const localPlaylist = local.get(item.id);
+    if (typeof item.deletedAt === 'string') {
+      if (localPlaylist && playlistUpdatedAt(localPlaylist) <= item.deletedAt) local.delete(item.id);
+      else if (localPlaylist) pendingUploads.push(localPlaylist);
+      continue;
+    }
+    if (!isPlaylist(item.playlist)) continue;
+    const remotePlaylist = { ...item.playlist, updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : playlistUpdatedAt(item.playlist) };
+    if (!localPlaylist || playlistUpdatedAt(remotePlaylist) > playlistUpdatedAt(localPlaylist)) local.set(item.id, remotePlaylist);
+    else if (playlistUpdatedAt(localPlaylist) > playlistUpdatedAt(remotePlaylist)) pendingUploads.push(localPlaylist);
+  }
+  for (const playlist of local.values()) if (!remoteIds.has(playlist.id)) pendingUploads.push(playlist);
+  manager.replaceLibrary([...local.values()].sort((a, b) => playlistUpdatedAt(b).localeCompare(playlistUpdatedAt(a))));
+  for (const playlist of pendingUploads) queueCloudChange({ type: 'upsert', playlist });
+}
+
+async function claimLocalShares(): Promise<void> {
+  const keys = shareKeys();
+  for (const playlist of manager.listPlaylists()) {
+    const credentials = keys[playlist.id];
+    if (!credentials || playlist.ownerShareId === credentials.id) continue;
+    try {
+      const response = await authFetch(`/api/playlists/${encodeURIComponent(credentials.id)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ownerToken: credentials.token }),
+      });
+      if (response.ok) manager.setOwnerShareId(playlist.id, credentials.id);
+    } catch { /* The recovery link still works locally if claiming has to be retried later. */ }
+  }
+}
+
+async function handleAuthChange(): Promise<void> {
+  const userId = clerk?.user?.id ?? null;
+  authLoading = false;
+  if (observedUserId === userId) { render(); return; }
+  observedUserId = userId;
+  switchLocalLibrary(userId);
+  render();
+  if (!userId) return;
+  try {
+    await reconcileCloudLibrary();
+    await claimLocalShares();
+    notice = 'Signed in. Your library is now saved securely and available across devices.';
+    noticeKind = 'success'; render();
+  } catch {
+    notice = 'You are signed in, but the cloud library could not be reached. Your playlists remain safe on this device.';
+    noticeKind = 'error'; render();
+  }
+}
+
+async function initializeAuth(): Promise<void> {
+  if (!clerkPublishableKey) { authLoading = false; return; }
+  try {
+    const encodedDomain = clerkPublishableKey.split('_')[2];
+    if (!encodedDomain) throw new Error('Invalid Clerk publishable key.');
+    const clerkDomain = atob(encodedDomain).slice(0, -1);
+    if (!/^[a-z0-9.-]+$/i.test(clerkDomain)) throw new Error('Invalid Clerk domain.');
+    if (!window.Clerk) {
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = `https://${clerkDomain}/npm/@clerk/clerk-js@6/dist/clerk.browser.js`;
+        script.async = true; script.crossOrigin = 'anonymous';
+        script.dataset.clerkPublishableKey = clerkPublishableKey;
+        script.addEventListener('load', () => resolve(), { once: true });
+        script.addEventListener('error', () => reject(new Error('Clerk could not be loaded.')), { once: true });
+        document.head.appendChild(script);
+      });
+    }
+    clerk = window.Clerk ?? null;
+    if (!clerk) throw new Error('Clerk could not be initialized.');
+    await clerk.load();
+    clerk.addListener(() => { void handleAuthChange(); });
+    await handleAuthChange();
+  } catch {
+    authLoading = false; authError = true; render();
+  }
 }
 
 function safeArtwork(url?: string): string | undefined {
@@ -266,15 +424,17 @@ function shareKeys(): Record<string, { id: string; token: string }> {
 
 async function syncCurrentShare(): Promise<boolean> {
   if (!currentId) return true;
-  const keys = shareKeys()[currentId];
   const playlist = manager.getPlaylist(currentId);
-  if (!keys || !playlist) return true;
+  const keys = shareKeys()[currentId];
+  const shareId = keys?.id ?? playlist?.ownerShareId;
+  if (!shareId || !playlist) return true;
   let succeeded = true;
   shareSyncQueue = shareSyncQueue.then(async () => {
-    const response = await fetch(`/api/playlists/${encodeURIComponent(keys.id)}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${keys.token}` },
+    const init: RequestInit = {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', ...(keys ? { Authorization: `Bearer ${keys.token}` } : {}) },
       body: JSON.stringify({ playlist: { name: playlist.name, songs: playlist.songs, createdAt: playlist.createdAt, theme: playlist.theme ?? 'mixtape', recipient: playlist.recipient ?? '', sender: playlist.sender ?? '', dedication: playlist.dedication ?? '' } }),
-    });
+    };
+    const response = keys ? await fetch(`/api/playlists/${encodeURIComponent(shareId)}`, init) : await authFetch(`/api/playlists/${encodeURIComponent(shareId)}`, init);
     if (!response.ok) throw new Error('Could not update the shared playlist.');
   }).catch(() => {
     succeeded = false;
@@ -286,9 +446,19 @@ async function syncCurrentShare(): Promise<boolean> {
 }
 
 function render(): void {
-  const playlists = manager.listPlaylists();
+  let libraryLocked = false;
+  try { libraryLocked = authLoading && !!localStorage.getItem(ACTIVE_LIBRARY_USER_KEY); } catch { /* Render the local library if storage cannot be checked. */ }
+  const playlists = libraryLocked ? [] : manager.listPlaylists();
   const active = currentPlaylist();
   const readonly = !!sharedPlaylist;
+  const signedIn = !!clerk?.isSignedIn;
+  const accountName = clerk?.user?.fullName || clerk?.user?.firstName || clerk?.user?.primaryEmailAddress?.emailAddress || 'Your account';
+  const accountInitial = accountName.trim().charAt(0).toUpperCase() || 'S';
+  const accountControl = clerkPublishableKey
+    ? signedIn
+      ? `<button class="account-user-button" id="account-menu" aria-label="Open account menu" title="${escapeHtml(accountName)}">${escapeHtml(accountInitial)}</button>`
+      : `<button class="button button-outline account-sign-in" id="sign-in" ${authLoading ? 'disabled' : ''}>${authLoading ? 'Checking…' : authError ? 'Retry sign in' : 'Sign in'}</button>`
+    : '';
   if (active && isTheme(active.theme)) currentTheme = active.theme;
   const sharedFormat = currentTheme === 'side-a' ? 'record' : currentTheme === 'cd-mix' ? 'CD mix' : currentTheme === 'playlist' ? 'playlist' : 'mixtape';
   const sharedSender = sharedPlaylist?.sender?.trim();
@@ -299,11 +469,11 @@ function render(): void {
   document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="app-shell">
       <a class="skip-link" href="#main-content">Skip to playlist</a>
-      <header class="topbar"><a class="brand" href="#" aria-label="Choose a playlist format">${formatLogo(currentTheme, false)}<span>${escapeHtml(themeLabels[currentTheme])}<span class="brand-period">.</span></span></a><span class="top-note">A little more together</span>${active || homeFormatChosen ? `<label class="theme-control"><span>FORMAT</span><select id="theme-select" aria-label="Choose a visual theme" ${readonly ? 'disabled title="This is the format chosen for this shared mix"' : ''}>${themes.map(theme => `<option value="${theme}" ${currentTheme === theme ? 'selected' : ''}>${themeLabels[theme]}</option>`).join('')}</select></label>` : ''}<button class="button button-quiet" id="new-playlist">＋ <span>New playlist</span></button></header>
+      <header class="topbar"><a class="brand" href="#" aria-label="Choose a playlist format">${formatLogo(currentTheme, false)}<span>${escapeHtml(themeLabels[currentTheme])}<span class="brand-period">.</span></span></a><span class="top-note">A little more together</span>${active || homeFormatChosen ? `<label class="theme-control"><span>FORMAT</span><select id="theme-select" aria-label="Choose a visual theme" ${readonly ? 'disabled title="This is the format chosen for this shared mix"' : ''}>${themes.map(theme => `<option value="${theme}" ${currentTheme === theme ? 'selected' : ''}>${themeLabels[theme]}</option>`).join('')}</select></label>` : ''}<button class="button button-quiet" id="new-playlist">＋ <span>New playlist</span></button>${accountControl}</header>
       <main class="layout">
         <aside class="sidebar"><div class="sidebar-heading"><span>Your library</span><span class="count-pill">${playlists.length}</span></div>
-          <nav class="playlist-nav" aria-label="Your playlists">${playlists.length ? playlists.map(p => `<button class="playlist-nav-item ${p.id === active?.id ? 'selected' : ''}" data-open="${escapeHtml(p.id)}" title="${escapeHtml(p.name)}" ${p.id === active?.id ? 'aria-current="page"' : ''}>${formatLogo(isTheme(p.theme) ? p.theme : 'mixtape', false)}<span class="nav-name">${escapeHtml(p.name)}</span><span class="nav-count">${p.songs.length}</span></button>`).join('') : '<p class="sidebar-empty">Your playlists will live here.</p>'}</nav>
-          <div class="sidebar-bottom"><div class="avatar">s</div><div><strong>Just you</strong><span>Saved on this device</span></div></div>
+          <nav class="playlist-nav" aria-label="Your playlists">${libraryLocked ? '<p class="sidebar-empty">Checking your account…</p>' : playlists.length ? playlists.map(p => `<button class="playlist-nav-item ${p.id === active?.id ? 'selected' : ''}" data-open="${escapeHtml(p.id)}" title="${escapeHtml(p.name)}" ${p.id === active?.id ? 'aria-current="page"' : ''}>${formatLogo(isTheme(p.theme) ? p.theme : 'mixtape', false)}<span class="nav-name">${escapeHtml(p.name)}</span><span class="nav-count">${p.songs.length}</span></button>`).join('') : '<p class="sidebar-empty">Your playlists will live here.</p>'}</nav>
+          <div class="sidebar-bottom"><div class="avatar">${signedIn ? escapeHtml(accountInitial) : 's'}</div><div><strong>${signedIn ? escapeHtml(accountName) : 'Just you'}</strong><span>${signedIn ? 'Saved securely in the cloud' : authLoading ? 'Checking your account…' : 'Saved on this device'}</span></div></div>
         </aside>
         <section class="content" id="main-content" tabindex="-1">
           ${notice ? `<div class="toast ${noticeKind === 'error' ? 'toast-error' : ''}" role="status">${escapeHtml(notice)}<button id="dismiss-notice" aria-label="Dismiss">×</button></div>` : ''}
@@ -314,6 +484,7 @@ function render(): void {
       <footer class="footer"><span>Music links, all in one place.</span><span>Made for sharing <span class="heart">♥</span></span></footer>
       <dialog id="create-dialog" class="dialog"><form id="create-form"><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">STEP 1 OF 3 · NAME IT</span><div class="create-format-summary">${formatLogo(currentTheme, true)}<span>This playlist will use the ${escapeHtml(themeLabels[currentTheme])} look.</span></div><h2>Name your mix.</h2><p>Only the name is required. You can change the other details later.</p><label for="playlist-name">Playlist name <b>Required</b></label><input id="playlist-name" name="name" maxlength="60" placeholder="Sunday morning, road trip…" required autofocus><div class="personal-fields"><label>Made for <small>Optional</small><input name="recipient" maxlength="40" placeholder="Their name"></label><label>Made by <small>Optional</small><input name="sender" maxlength="40" placeholder="Your name"></label><label class="dedication-field">A short note <small>Optional</small><input name="dedication" maxlength="140" placeholder="A few words just for them"></label></div><div class="dialog-actions"><button type="button" class="button button-quiet" data-close>Cancel</button><button class="button button-dark" type="submit">Create &amp; add songs <span>→</span></button></div></form></dialog>
       <dialog id="add-dialog" class="dialog"><form id="add-form"><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">STEP 2 OF 3 · ADD SONGS</span><h2>Add songs.</h2><p>Paste a whole YouTube playlist, or add individual song links with one link on each line.</p><div class="link-help"><span><b>Whole YouTube playlist</b>Adds every video that is Public or Unlisted.</span><span><b>Individual songs</b>Works with YouTube, Spotify, SoundCloud, Apple Music, and Tidal.</span></div><label for="song-urls">Song or playlist links</label><textarea id="song-urls" name="urls" rows="6" placeholder="https://youtube.com/playlist?list=…&#10;https://open.spotify.com/track/…" required></textarea><p class="form-error" id="add-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" class="button button-quiet" data-close>Cancel</button><button class="button button-dark" type="submit">Add songs <span>→</span></button></div></form></dialog>
+      ${signedIn ? `<dialog id="account-dialog" class="dialog account-dialog"><div><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">YOUR ACCOUNT</span><div class="account-summary"><div class="avatar">${escapeHtml(accountInitial)}</div><div><h2>${escapeHtml(accountName)}</h2><p>${escapeHtml(clerk?.user?.primaryEmailAddress?.emailAddress ?? '')}</p></div></div><div class="cloud-confirmation"><b>✓ Cloud library is on</b><span>Your playlists and owner access are available anywhere you sign in.</span></div><div class="dialog-actions"><button type="button" class="button button-quiet" id="account-settings">Account settings</button><button type="button" class="button button-outline danger-button" id="sign-out">Sign out</button></div></div></dialog>` : ''}
       <input type="file" id="import-file" accept="application/json,.json" hidden>
     </div>`;
   bindEvents();
@@ -600,6 +771,17 @@ function bindEvents(): void {
   app.querySelectorAll<HTMLElement>('[data-open]').forEach(el => el.addEventListener('click', () => { currentId = el.dataset.open!; sharedPlaylist = null; currentShareId = null; homeFormatChosen = false; playerOpen = false; playerTrackId = null; playerPlaylistId = null; notice = ''; loadOwnerReactions(currentId); render(); }));
   app.querySelector('.brand')?.addEventListener('click', event => { event.preventDefault(); showFormatChooser(); });
   app.querySelector('#new-playlist')?.addEventListener('click', showFormatChooser);
+  app.querySelector('#sign-in')?.addEventListener('click', () => {
+    if (authError || !clerk) {
+      authError = false; authLoading = true; render(); void initializeAuth(); return;
+    }
+    void clerk.redirectToSignIn({ redirectUrl: location.href });
+  });
+  app.querySelector('#account-menu')?.addEventListener('click', () => document.querySelector<HTMLDialogElement>('#account-dialog')?.showModal());
+  app.querySelector('#account-settings')?.addEventListener('click', () => { if (clerk) void clerk.redirectToUserProfile(); });
+  app.querySelector('#sign-out')?.addEventListener('click', () => {
+    if (clerk) void clerk.signOut({ redirectUrl: `${location.origin}${location.pathname}` });
+  });
   app.querySelectorAll<HTMLElement>('[data-choose-format]').forEach(button => button.addEventListener('click', () => {
     const selected = button.dataset.chooseFormat;
     if (!isTheme(selected)) return;
@@ -759,18 +941,20 @@ async function sharePlaylist(): Promise<void> {
   const playlist = currentPlaylist();
   if (!playlist || !currentId) return;
   let keys = shareKeys();
-  let credentials = keys[currentId];
+  let credentials: { id: string; token?: string } | undefined = keys[currentId] ?? (playlist.ownerShareId ? { id: playlist.ownerShareId } : undefined);
   try {
     if (!credentials) {
-      const response = await fetch('/api/playlists', {
+      const init: RequestInit = {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ playlist: { name: playlist.name, songs: playlist.songs, createdAt: playlist.createdAt, theme: playlist.theme ?? 'mixtape', recipient: playlist.recipient ?? '', sender: playlist.sender ?? '', dedication: playlist.dedication ?? '' } }),
-      });
+      };
+      const response = clerk?.isSignedIn ? await authFetch('/api/playlists', init) : await fetch('/api/playlists', init);
       const result = await response.json() as { id?: string; editToken?: string; error?: string };
       if (!response.ok || !result.id || !result.editToken) throw new Error(result.error ?? 'Cloud sharing is not available.');
       credentials = { id: result.id, token: result.editToken };
-      keys = { ...keys, [currentId]: credentials };
+      keys = { ...keys, [currentId]: { id: credentials.id, token: result.editToken } };
       localStorage.setItem(SHARE_KEYS, JSON.stringify(keys));
+      if (clerk?.isSignedIn) manager.setOwnerShareId(currentId, result.id);
     } else {
       if (!await syncCurrentShare()) throw new Error('The live playlist could not be refreshed.');
     }
@@ -797,9 +981,13 @@ async function saveShared(): Promise<void> {
   const ownerToken = pendingOwnerToken;
   if (sourceShareId && ownerToken) {
     try {
-      const response = await fetch(`/api/playlists/${encodeURIComponent(sourceShareId)}`, {
-        method: 'POST', headers: { Authorization: `Bearer ${ownerToken}` },
-      });
+      const response = clerk?.isSignedIn
+        ? await authFetch(`/api/playlists/${encodeURIComponent(sourceShareId)}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ownerToken }),
+        })
+        : await fetch(`/api/playlists/${encodeURIComponent(sourceShareId)}`, {
+          method: 'POST', headers: { Authorization: `Bearer ${ownerToken}` },
+        });
       if (!response.ok) throw new Error();
     } catch {
       pendingOwnerToken = null;
@@ -809,6 +997,7 @@ async function saveShared(): Promise<void> {
   const copy = manager.createPlaylist(sharedPlaylist.name, sharedPlaylist.theme ?? 'mixtape', sharedPlaylist.recipient ?? '', sharedPlaylist.dedication ?? '', sharedPlaylist.sender ?? '');
   manager.addSongs(copy.id, sharedPlaylist.songs.map(song => ({ ...song })));
   if (sourceShareId) manager.setFeedbackShareId(copy.id, sourceShareId);
+  if (sourceShareId && ownerToken && clerk?.isSignedIn) manager.setOwnerShareId(copy.id, sourceShareId);
   if (sourceShareId && ownerToken) {
     const keys = shareKeys();
     localStorage.setItem(SHARE_KEYS, JSON.stringify({ ...keys, [copy.id]: { id: sourceShareId, token: ownerToken } }));
@@ -869,6 +1058,9 @@ function showError(error: unknown): void {
   notice = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
   noticeKind = 'error'; render();
 }
+
+manager.setChangeListener(queueCloudChange);
+void initializeAuth();
 
 void readSharedPlaylist().then(playlist => {
   sharedPlaylist = playlist;

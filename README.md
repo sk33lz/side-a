@@ -15,6 +15,8 @@ npm run dev
 
 YouTube playlist importing uses the YouTube Data API. Add a Cloudflare Pages secret named `GOOGLE_API_KEY`. For local Wrangler development, create a `.dev.vars` file containing `GOOGLE_API_KEY=your-key`; that file should remain uncommitted.
 
+Optional account sign-in and cloud libraries use Clerk. Add `VITE_CLERK_PUBLISHABLE_KEY` as a Pages environment variable and `CLERK_SECRET_KEY` as an encrypted Pages secret. Enable Google and email verification-code sign-in in Clerk. The browser loads Clerk's official hosted sign-in client only when a publishable key is configured; the secret key is used only by Pages Functions to verify session tokens.
+
 For frontend-only work without Pages Functions, use `npm run dev:vite` (live sharing will not work in this mode).
 
 ## Build and preview
@@ -39,5 +41,7 @@ Choose **Share playlist** to create a live link backed by D1. The owner can edit
 After sharing, choose **Recovery link** to copy a separate private owner URL. Opening it on a new browser restores the playlist, edit authority, and its connection to recipient feedback. The recovery URL contains the owner token in its fragment, which is not sent to the server during navigation; anyone who receives that URL can edit the playlist, so it must not be sent to recipients.
 
 The edit credential stays in the owner's browser and is stored as a hash in D1. Anyone with the share link can view that playlist, but only the owner browser that created it can update the shared record.
+
+When signed in, playlists are also saved to the owner's D1-backed library. Existing private recovery credentials are automatically claimed by that account, allowing the owner to edit live playlists and see feedback after signing in on another device. Signing out switches back to the browser's separate guest library, preventing another account on the same browser from inheriting the signed-in library.
 
 Track links are organized locally, while public YouTube playlists can be expanded through the server-side YouTube Data API integration. Playlist imports preserve the YouTube order and include available titles, channels, artwork, and durations. Private YouTube playlists require OAuth and are not supported.
