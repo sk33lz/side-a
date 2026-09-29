@@ -24,6 +24,7 @@ function savedTheme(): Theme {
   catch { return 'mixtape'; }
 }
 let currentTheme: Theme = savedTheme();
+let homeFormatChosen = false;
 let shareSyncQueue: Promise<void> = Promise.resolve();
 let notice = '';
 let noticeKind: 'success' | 'error' = 'success';
@@ -289,12 +290,16 @@ function render(): void {
   const active = currentPlaylist();
   const readonly = !!sharedPlaylist;
   if (active && isTheme(active.theme)) currentTheme = active.theme;
+  const sharedFormat = currentTheme === 'side-a' ? 'record' : currentTheme === 'cd-mix' ? 'CD mix' : currentTheme === 'playlist' ? 'playlist' : 'mixtape';
+  const sharedSender = sharedPlaylist?.sender?.trim();
+  const sharedTitle = sharedSender ? `${sharedSender} shared a ${sharedFormat} with you` : `A ${sharedFormat} was shared with you`;
+  const sharedSummary = sharedPlaylist ? `“${sharedPlaylist.name}” · ${sharedPlaylist.songs.length} ${sharedPlaylist.songs.length === 1 ? 'song' : 'songs'}. Reorder it your way and react to each song.` : '';
   document.documentElement.dataset.theme = currentTheme;
   document.title = `${themeLabels[currentTheme]} — Your music, together`;
   document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="app-shell">
       <a class="skip-link" href="#main-content">Skip to playlist</a>
-      <header class="topbar"><a class="brand" href="#" aria-label="${escapeHtml(themeLabels[currentTheme])} home">${formatLogo(currentTheme, false)}<span>${escapeHtml(themeLabels[currentTheme])}<span class="brand-period">.</span></span></a><span class="top-note">A little more together</span><label class="theme-control"><span>FORMAT</span><select id="theme-select" aria-label="Choose a visual theme" ${readonly ? 'disabled title="This is the format chosen for this shared mix"' : ''}>${themes.map(theme => `<option value="${theme}" ${currentTheme === theme ? 'selected' : ''}>${themeLabels[theme]}</option>`).join('')}</select></label><button class="button button-quiet" id="new-playlist">＋ <span>New playlist</span></button></header>
+      <header class="topbar"><a class="brand" href="#" aria-label="Choose a playlist format">${formatLogo(currentTheme, false)}<span>${escapeHtml(themeLabels[currentTheme])}<span class="brand-period">.</span></span></a><span class="top-note">A little more together</span>${active || homeFormatChosen ? `<label class="theme-control"><span>FORMAT</span><select id="theme-select" aria-label="Choose a visual theme" ${readonly ? 'disabled title="This is the format chosen for this shared mix"' : ''}>${themes.map(theme => `<option value="${theme}" ${currentTheme === theme ? 'selected' : ''}>${themeLabels[theme]}</option>`).join('')}</select></label>` : ''}<button class="button button-quiet" id="new-playlist">＋ <span>New playlist</span></button></header>
       <main class="layout">
         <aside class="sidebar"><div class="sidebar-heading"><span>Your library</span><span class="count-pill">${playlists.length}</span></div>
           <nav class="playlist-nav" aria-label="Your playlists">${playlists.length ? playlists.map(p => `<button class="playlist-nav-item ${p.id === active?.id ? 'selected' : ''}" data-open="${escapeHtml(p.id)}" title="${escapeHtml(p.name)}" ${p.id === active?.id ? 'aria-current="page"' : ''}>${formatLogo(isTheme(p.theme) ? p.theme : 'mixtape', false)}<span class="nav-name">${escapeHtml(p.name)}</span><span class="nav-count">${p.songs.length}</span></button>`).join('') : '<p class="sidebar-empty">Your playlists will live here.</p>'}</nav>
@@ -302,13 +307,13 @@ function render(): void {
         </aside>
         <section class="content" id="main-content" tabindex="-1">
           ${notice ? `<div class="toast ${noticeKind === 'error' ? 'toast-error' : ''}" role="status">${escapeHtml(notice)}<button id="dismiss-notice" aria-label="Dismiss">×</button></div>` : ''}
-          ${sharedPlaylist ? `<div class="shared-banner ${pendingOwnerToken ? 'owner-recovery-banner' : ''}"><span class="shared-icon">${pendingOwnerToken ? '⌁' : '↗'}</span><div><strong>${pendingOwnerToken ? 'Private recovery link opened' : 'Someone shared a playlist with you'}</strong><span>${pendingOwnerToken ? 'Restore this mix, its editing access, and recipient feedback to this browser.' : 'Reorder it your way and react to the tracks. Your order stays on this device.'}</span></div><button class="button button-dark" id="save-shared">${pendingOwnerToken ? 'Restore owner access' : 'Save a copy'}</button><button class="icon-button banner-close" id="close-shared" aria-label="Close shared playlist">×</button></div>` : ''}
+          ${sharedPlaylist ? `<div class="shared-banner ${pendingOwnerToken ? 'owner-recovery-banner' : ''}"><span class="shared-icon">${pendingOwnerToken ? '⌁' : '↗'}</span><div><strong>${pendingOwnerToken ? 'Private recovery link opened' : escapeHtml(sharedTitle)}</strong><span>${pendingOwnerToken ? 'Restore this mix, its editing access, and recipient feedback to this browser.' : escapeHtml(sharedSummary)}</span></div><button class="button button-dark" id="save-shared">${pendingOwnerToken ? 'Restore owner access' : 'Save a copy'}</button><button class="icon-button banner-close" id="close-shared" aria-label="Close shared playlist">×</button></div>` : ''}
           ${active ? playlistView(active, readonly) : welcomeView()}
         </section>
       </main>
       <footer class="footer"><span>Music links, all in one place.</span><span>Made for sharing <span class="heart">♥</span></span></footer>
-      <dialog id="create-dialog" class="dialog"><form id="create-form"><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">START A COLLECTION</span><h2>Make something for someone.</h2><p>Name the mix, personalize it, then choose the format that fits its feeling.</p><label for="playlist-name">Mix name</label><input id="playlist-name" name="name" maxlength="60" placeholder="Sunday morning, road trip…" required autofocus><div class="personal-fields"><label>Made for<input name="recipient" maxlength="40" placeholder="Their name"></label><label>Made by<input name="sender" maxlength="40" placeholder="Your name"></label><label class="dedication-field">Short dedication<input name="dedication" maxlength="140" placeholder="A few words just for them"></label></div><fieldset class="format-picker"><legend>Choose a format</legend>${themes.map(theme => `<label><input type="radio" name="theme" value="${theme}" ${currentTheme === theme ? 'checked' : ''}>${formatLogo(theme, true)}</label>`).join('')}</fieldset><div class="dialog-actions"><button type="button" class="button button-quiet" data-close>Cancel</button><button class="button button-dark" type="submit">Create mix <span>→</span></button></div></form></dialog>
-      <dialog id="add-dialog" class="dialog"><form id="add-form"><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">ADD TO YOUR PLAYLIST</span><h2>Bring a track along.</h2><p>Paste a YouTube playlist or add individual music links, with one URL on each line.</p><label for="song-urls">Track or playlist links</label><textarea id="song-urls" name="urls" rows="6" placeholder="https://youtube.com/playlist?list=…&#10;https://open.spotify.com/track/…" required></textarea><span class="field-hint">YouTube playlists · YouTube · Spotify · SoundCloud · Apple Music · Tidal</span><div class="dialog-actions"><button type="button" class="button button-quiet" data-close>Cancel</button><button class="button button-dark" type="submit">Add tracks <span>→</span></button></div></form></dialog>
+      <dialog id="create-dialog" class="dialog"><form id="create-form"><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">STEP 1 OF 3 · NAME IT</span><div class="create-format-summary">${formatLogo(currentTheme, true)}<span>This playlist will use the ${escapeHtml(themeLabels[currentTheme])} look.</span></div><h2>Name your mix.</h2><p>Only the name is required. You can change the other details later.</p><label for="playlist-name">Playlist name <b>Required</b></label><input id="playlist-name" name="name" maxlength="60" placeholder="Sunday morning, road trip…" required autofocus><div class="personal-fields"><label>Made for <small>Optional</small><input name="recipient" maxlength="40" placeholder="Their name"></label><label>Made by <small>Optional</small><input name="sender" maxlength="40" placeholder="Your name"></label><label class="dedication-field">A short note <small>Optional</small><input name="dedication" maxlength="140" placeholder="A few words just for them"></label></div><div class="dialog-actions"><button type="button" class="button button-quiet" data-close>Cancel</button><button class="button button-dark" type="submit">Create &amp; add songs <span>→</span></button></div></form></dialog>
+      <dialog id="add-dialog" class="dialog"><form id="add-form"><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">STEP 2 OF 3 · ADD SONGS</span><h2>Add songs.</h2><p>Paste a whole YouTube playlist, or add individual song links with one link on each line.</p><div class="link-help"><span><b>Whole YouTube playlist</b>Adds every video that is Public or Unlisted.</span><span><b>Individual songs</b>Works with YouTube, Spotify, SoundCloud, Apple Music, and Tidal.</span></div><label for="song-urls">Song or playlist links</label><textarea id="song-urls" name="urls" rows="6" placeholder="https://youtube.com/playlist?list=…&#10;https://open.spotify.com/track/…" required></textarea><p class="form-error" id="add-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" class="button button-quiet" data-close>Cancel</button><button class="button button-dark" type="submit">Add songs <span>→</span></button></div></form></dialog>
       <input type="file" id="import-file" accept="application/json,.json" hidden>
     </div>`;
   bindEvents();
@@ -327,6 +332,22 @@ function themeArtwork(theme: Theme, cover = false, playlist?: Playlist): string 
 }
 
 function welcomeView(): string {
+  if (!homeFormatChosen) {
+    const choices: Record<Theme, { name: string; description: string; bestFor: string }> = {
+      'side-a': { name: 'Record', description: 'A warm, album-style collection with a classic sleeve.', bestFor: 'Thoughtful collections' },
+      mixtape: { name: 'Mixtape', description: 'A personal cassette with a note made for someone.', bestFor: 'Gifts and dedications' },
+      'cd-mix': { name: 'CD Mix', description: 'A polished keepsake inspired by the mixes you burned.', bestFor: 'Big themed mixes' },
+      playlist: { name: 'Playlist', description: 'A clean, modern list that gets straight to the music.', bestFor: 'Quick everyday sharing' },
+    };
+    return `<section class="format-home" aria-labelledby="format-home-title">
+      <div class="format-home-heading"><span class="eyebrow">START HERE</span><h1 id="format-home-title">What kind of song list<br>do you want to make?</h1><p>Choose a look. Your songs can still come from any supported music service.</p></div>
+      <div class="format-choice-grid">${themes.map((theme, index) => {
+        const choice = choices[theme];
+        return `<button class="format-choice format-choice-${theme}" data-choose-format="${theme}" aria-label="Choose ${escapeHtml(choice.name)}"><span class="format-choice-number">0${index + 1}</span>${formatLogo(theme, false)}<span class="format-choice-copy"><b>${escapeHtml(choice.name)}</b><span>${escapeHtml(choice.description)}</span><small>Best for: ${escapeHtml(choice.bestFor)}</small></span><span class="format-choice-cta">Choose this format →</span></button>`;
+      }).join('')}</div>
+      <div class="format-home-footer"><span>Already have a Mixtape backup?</span><button class="button button-quiet" id="import-trigger">Import a backup file</button></div>
+    </section>`;
+  }
   const intro: Record<Theme, { eyebrow: string; title: string; copy: string; button: string; caption: string }> = {
     'side-a': { eyebrow: 'YOUR MUSIC, TOGETHER', title: 'Every song has<br>a <em>place.</em>', copy: "Collect the tracks you love from all over the internet. Make a playlist, pass it along, and make someone's day.", button: 'Make a playlist', caption: 'A little more together' },
     mixtape: { eyebrow: 'RECORDED WITH YOU IN MIND', title: 'A mix made<br><em>just for you.</em>', copy: 'Like a mixtape passed across the room: a few favorite songs, a handwritten note, and a little bit of meaning.', button: 'Make a mixtape', caption: 'PRESS PLAY · SIDE A' },
@@ -334,7 +355,7 @@ function welcomeView(): string {
     playlist: { eyebrow: 'MUSIC FOR THIS MOMENT', title: 'Set the mood.<br><em>Press play.</em>', copy: 'Gather the links you keep coming back to and send someone a soundtrack for wherever they are.', button: 'Make a playlist', caption: 'A MIX FOR RIGHT NOW' },
   };
   const content = intro[currentTheme];
-  return `<div class="welcome"><div class="welcome-copy"><span class="eyebrow">${content.eyebrow}</span><h1>${content.title}</h1><p>${content.copy}</p><div class="welcome-actions"><button class="button button-dark button-large" id="welcome-create">${content.button} <span>→</span></button><button class="button button-quiet import-trigger" id="import-trigger">Import playlist</button></div><div class="source-row"><span>Works with</span><span class="source-chip">YouTube</span><span class="source-chip">Spotify</span><span class="source-chip">SoundCloud</span><span class="source-chip">Apple Music</span><span class="source-chip">Tidal</span></div></div><div class="art-card theme-art theme-art-${currentTheme}"><div class="art-format-logo">${formatLogo(currentTheme)}</div>${themeArtwork(currentTheme)}${currentTheme !== 'side-a' ? `<div class="theme-art-caption">${content.caption}</div>` : ''}</div><div class="how-strip"><span class="how-item"><b>01</b><span>Collect links from the places you listen</span></span><span class="how-divider"></span><span class="how-item"><b>02</b><span>Add your own titles and notes</span></span><span class="how-divider"></span><span class="how-item"><b>03</b><span>Share a link with someone you love</span></span></div></div>`;
+  return `<div class="welcome"><div class="welcome-copy"><span class="eyebrow">${content.eyebrow}</span><h1>${content.title}</h1><p>${content.copy}</p><div class="welcome-actions"><button class="button button-dark button-large" id="welcome-create">${content.button} <span>→</span></button><button class="button button-quiet" id="choose-format">← Choose another format</button></div><div class="source-row"><span>Add songs from</span><span class="source-chip">YouTube playlists</span><span class="source-chip">YouTube</span><span class="source-chip">Spotify</span><span class="source-chip">SoundCloud</span><span class="source-chip">Apple Music</span><span class="source-chip">Tidal</span><button class="source-import" id="import-trigger">Import a backup</button></div></div><div class="art-card theme-art theme-art-${currentTheme}"><div class="art-format-logo">${formatLogo(currentTheme)}</div>${themeArtwork(currentTheme)}${currentTheme !== 'side-a' ? `<div class="theme-art-caption">${content.caption}</div>` : ''}</div><div class="how-strip"><span class="how-item"><b>01</b><span>Name it and add an optional dedication</span></span><span class="how-divider"></span><span class="how-item"><b>02</b><span>Paste a YouTube playlist or song links</span></span><span class="how-divider"></span><span class="how-item"><b>03</b><span>Share one live link and see feedback</span></span></div></div>`;
 }
 
 function playlistView(playlist: Playlist, readonly: boolean): string {
@@ -352,20 +373,22 @@ function playlistView(playlist: Playlist, readonly: boolean): string {
     ? `<p class="duration-help"><b>${knownDurations} of ${playlist.songs.length}</b> track lengths known. Play each YouTube track once or enter its length as <strong>m:ss</strong>.</p>` : '';
   const canPlay = playableSongs(playlist).length > 0;
   const ownerCredentials = !readonly && currentId ? shareKeys()[currentId] : undefined;
+  const workflow = !readonly ? `<div class="playlist-workflow" aria-label="Playlist setup progress"><span class="done"><b>1</b><i>Named</i></span><span class="${songs.length ? 'done' : 'current'}"><b>2</b><i>${songs.length ? `${songs.length} songs added` : 'Add songs'}</i></span><span class="${ownerCredentials ? 'done' : songs.length ? 'current' : ''}"><b>3</b><i>${ownerCredentials ? 'Shared' : 'Share it'}</i></span></div>` : '';
   const listenButton = canPlay ? `<button class="button button-play" id="play-mix">▶ <span>${playerOpen && playerPlaylistId === playlist.id ? 'Restart mix' : 'Play mix'}</span></button>` : '';
   return `<div class="playlist-page">
     <div class="playlist-cover theme-cover theme-cover-${currentTheme} ${customDedication ? 'has-dedication' : ''}"><div class="cover-format-logo">${formatLogo(currentTheme)}</div>${dedicationNote}${cover}<span class="cover-label">${coverLabel[currentTheme]}</span></div>
     <div class="playlist-heading">
-      <div class="playlist-heading-top"><span class="eyebrow">${readonly ? 'SHARED WITH YOU' : 'YOUR COLLECTION'}</span><div class="heading-actions">${!readonly ? `<button class="button button-outline" id="export-playlist">↓ <span>Export</span></button><button class="button button-outline" id="share-playlist">↗ <span>Copy live link</span></button>${ownerCredentials ? '<button class="button button-outline" id="copy-recovery-link">⌁ <span>Recovery link</span></button>' : ''}<button class="button button-outline danger-button" id="delete-playlist" aria-label="Delete playlist">× <span>Delete</span></button>` : ''}</div></div>
+      <div class="playlist-heading-top"><span class="eyebrow">${readonly ? 'SHARED WITH YOU' : 'YOUR COLLECTION'}</span><div class="heading-actions">${!readonly ? `<button class="button button-outline" id="export-playlist">↓ <span>Backup</span></button>${ownerCredentials ? '<button class="button button-outline" id="copy-recovery-link">⌁ <span>Owner recovery</span></button>' : ''}<button class="button button-outline danger-button" id="delete-playlist" aria-label="Delete playlist">× <span>Delete</span></button>` : ''}</div></div>
       <h1>${escapeHtml(playlist.name)}</h1>
       <p class="playlist-meta"><span class="avatar tiny">${readonly ? '♥' : 's'}</span> ${playlist.recipient ? `Made for <strong>${escapeHtml(playlist.recipient)}</strong>` : readonly ? 'Shared by someone' : 'Your collection'}${playlist.sender ? ` by <strong>${escapeHtml(playlist.sender)}</strong>` : ''} <span class="meta-separator">·</span> ${songs.length} ${songs.length === 1 ? 'track' : 'tracks'}${durationMeta}</p>
       ${customDedication ? '' : `<p class="playlist-description">${escapeHtml(dedication)}</p>`}
+      ${workflow}
       ${!readonly ? `<div class="personalize-mix"><label>Made for<input id="recipient-name" maxlength="40" value="${escapeHtml(playlist.recipient ?? '')}" placeholder="Add their name"></label><label>Made by<input id="sender-name" maxlength="40" value="${escapeHtml(playlist.sender ?? '')}" placeholder="Add your name"></label><label class="dedication-field">Dedication<input id="playlist-dedication" maxlength="140" value="${escapeHtml(playlist.dedication ?? '')}" placeholder="Write a few words"></label><span>Saved automatically</span></div>` : ''}
-      <div class="playlist-main-actions">${listenButton}${readonly && currentShareId ? `<button class="button button-quiet" id="reset-shared-order">↺ <span>Original order</span></button>` : ''}${!readonly ? `<button class="button button-dark" id="add-track">＋ <span>Add tracks</span></button><button class="button button-quiet" id="sort-playlist">↕ <span>Sort A–Z</span></button><button class="button button-quiet" id="import-trigger">↑ <span>Import file</span></button>` : ''}</div>
+      <div class="playlist-main-actions ${songs.length ? '' : 'is-empty'}">${listenButton}${readonly && currentShareId ? `<button class="button button-quiet" id="reset-shared-order">↺ <span>Original order</span></button>` : ''}${!readonly ? `<button class="button button-dark" id="add-track">＋ <span>Add songs</span></button><button class="button button-outline" id="share-playlist" ${songs.length ? '' : 'disabled title="Add at least one song before sharing"'}>↗ <span>Share playlist</span></button><button class="button button-quiet" id="sort-playlist">↕ <span>Sort A–Z</span></button><button class="button button-quiet" id="import-trigger">↑ <span>Restore backup</span></button>` : ''}</div>
       ${durationHelp}
     </div>
     ${playerOpen && playerPlaylistId === playlist.id ? queuePlayer(playlist) : ''}
-    <section class="track-section"><div class="track-header"><span class="track-number">ORDER</span><span>TITLE ${readonly ? '' : '<i>click to edit</i>'}</span><span>SERVICE</span><span>PLAY</span><span></span></div>${songs.length ? songs.map((song, index) => trackRow(song, index, readonly, songs.length)).join('') : `<div class="empty-tracks"><div class="empty-vinyl">♫</div><strong>This playlist is waiting for a first track.</strong><span>${readonly ? 'It looks like this one is empty.' : 'Paste one link or a whole list from your music apps.'}</span>${!readonly ? '<button class="button button-outline" id="add-first">Add tracks →</button>' : ''}</div>`}</section>
+    <section class="track-section"><div class="track-header"><span class="track-number">ORDER</span><span>TITLE ${readonly ? '' : '<i>click to edit</i>'}</span><span>SERVICE</span><span>PLAY</span><span></span></div>${songs.length ? songs.map((song, index) => trackRow(song, index, readonly, songs.length)).join('') : `<div class="empty-tracks"><div class="empty-vinyl">♫</div><strong>${readonly ? 'This playlist is empty.' : 'Add your first songs.'}</strong><span>${readonly ? 'The sender has not added any songs yet.' : 'Paste a YouTube playlist to add every viewable video, or add song links one per line.'}</span>${!readonly ? '<button class="button button-dark" id="add-first">Add songs →</button>' : ''}</div>`}</section>
     <div class="playlist-endnote"><span>✳</span> A good playlist is a little piece of you.</div>
   </div>`;
 }
@@ -574,8 +597,17 @@ function bindEvents(): void {
     try { localStorage.setItem(THEME_KEY, currentTheme); } catch { /* Keep the choice for this page view. */ }
     render();
   });
-  app.querySelectorAll<HTMLElement>('[data-open]').forEach(el => el.addEventListener('click', () => { currentId = el.dataset.open!; sharedPlaylist = null; currentShareId = null; playerOpen = false; playerTrackId = null; playerPlaylistId = null; notice = ''; loadOwnerReactions(currentId); render(); }));
-  app.querySelector('#new-playlist')?.addEventListener('click', openCreate);
+  app.querySelectorAll<HTMLElement>('[data-open]').forEach(el => el.addEventListener('click', () => { currentId = el.dataset.open!; sharedPlaylist = null; currentShareId = null; homeFormatChosen = false; playerOpen = false; playerTrackId = null; playerPlaylistId = null; notice = ''; loadOwnerReactions(currentId); render(); }));
+  app.querySelector('.brand')?.addEventListener('click', event => { event.preventDefault(); showFormatChooser(); });
+  app.querySelector('#new-playlist')?.addEventListener('click', showFormatChooser);
+  app.querySelectorAll<HTMLElement>('[data-choose-format]').forEach(button => button.addEventListener('click', () => {
+    const selected = button.dataset.chooseFormat;
+    if (!isTheme(selected)) return;
+    currentTheme = selected; homeFormatChosen = true; notice = '';
+    try { localStorage.setItem(THEME_KEY, currentTheme); } catch { /* Keep the choice for this page view. */ }
+    render(); requestAnimationFrame(() => document.querySelector<HTMLElement>('#main-content')?.focus());
+  }));
+  app.querySelector('#choose-format')?.addEventListener('click', () => { homeFormatChosen = false; render(); });
   app.querySelector('#welcome-create')?.addEventListener('click', openCreate);
   app.querySelectorAll('#add-track, #add-first').forEach(el => el.addEventListener('click', () => (document.querySelector<HTMLDialogElement>('#add-dialog')!).showModal()));
   app.querySelector('#sort-playlist')?.addEventListener('click', () => withPlaylist(id => manager.sortPlaylist(id), 'Tracks sorted by artist, then title.'));
@@ -622,7 +654,8 @@ function bindEvents(): void {
     try {
       const selectedTheme = isTheme(data.get('theme')) ? data.get('theme') as Theme : currentTheme;
       const playlist = manager.createPlaylist(String(data.get('name') ?? ''), selectedTheme, String(data.get('recipient') ?? ''), String(data.get('dedication') ?? ''), String(data.get('sender') ?? ''));
-      currentTheme = selectedTheme; currentId = playlist.id; notice = 'Mix created. Add the first track when you’re ready.'; (document.querySelector<HTMLDialogElement>('#create-dialog')!).close(); render();
+      currentTheme = selectedTheme; currentId = playlist.id; homeFormatChosen = false; notice = 'Your mix is ready. Add songs by pasting links or a whole YouTube playlist.'; (document.querySelector<HTMLDialogElement>('#create-dialog')!).close(); render();
+      requestAnimationFrame(() => document.querySelector<HTMLDialogElement>('#add-dialog')?.showModal());
     }
     catch (error) { showError(error); }
   });
@@ -638,10 +671,15 @@ function bindEvents(): void {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;
     const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const formError = form.querySelector<HTMLParagraphElement>('#add-error');
+    if (formError) { formError.hidden = true; formError.textContent = ''; }
     const data = new FormData(form); const playlist = currentPlaylist();
     if (!playlist || sharedPlaylist) return;
     const lines = String(data.get('urls') ?? '').split(/[\r\n]+/).map(line => line.trim()).filter(Boolean);
-    if (!lines.length) { showError(new Error('Paste at least one music link.')); return; }
+    if (!lines.length) {
+      if (formError) { formError.textContent = 'Paste at least one music link.'; formError.hidden = false; }
+      return;
+    }
     if (submit) { submit.disabled = true; submit.innerHTML = 'Adding…'; }
     const added: Song[] = [];
     const rejected: Array<{ line: string; message: string }> = [];
@@ -655,8 +693,12 @@ function bindEvents(): void {
       else rejected.push({ line, message: error });
     });
     if (!added.length) {
-      if (submit) { submit.disabled = false; submit.innerHTML = 'Add tracks <span>→</span>'; }
-      showError(new Error(rejected[0]?.message ?? 'No supported music links found. Check the URLs and try again.')); return;
+      if (submit) { submit.disabled = false; submit.innerHTML = 'Add songs <span>→</span>'; }
+      if (formError) {
+        formError.textContent = rejected[0]?.message ?? 'No supported music links found. Check the URLs and try again.';
+        formError.hidden = false;
+      }
+      return;
     }
     manager.addSongs(playlist.id, added);
     void syncCurrentShare();
@@ -699,6 +741,14 @@ function bindEvents(): void {
 }
 
 function openCreate(): void { document.querySelector<HTMLDialogElement>('#create-dialog')!.showModal(); }
+
+function showFormatChooser(): void {
+  currentId = null; sharedPlaylist = null; currentShareId = null; pendingOwnerToken = null;
+  playerOpen = false; playerTrackId = null; playerPlaylistId = null; homeFormatChosen = false;
+  reactions = {}; plays = {}; notice = '';
+  history.replaceState(null, '', location.pathname + location.search);
+  render();
+}
 
 function withPlaylist(action: (id: string) => void, message: string): void {
   if (!currentId) return;
