@@ -446,6 +446,7 @@ async function syncCurrentShare(): Promise<boolean> {
 }
 
 function render(): void {
+  const preservedPlayer = document.querySelector<HTMLElement>('.queue-player');
   let libraryLocked = false;
   try { libraryLocked = authLoading && !!localStorage.getItem(ACTIVE_LIBRARY_USER_KEY); } catch { /* Render the local library if storage cannot be checked. */ }
   const playlists = libraryLocked ? [] : manager.listPlaylists();
@@ -487,6 +488,12 @@ function render(): void {
       ${signedIn ? `<dialog id="account-dialog" class="dialog account-dialog"><div><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">YOUR ACCOUNT</span><div class="account-summary"><div class="avatar">${escapeHtml(accountInitial)}</div><div><h2>${escapeHtml(accountName)}</h2><p>${escapeHtml(clerk?.user?.primaryEmailAddress?.emailAddress ?? '')}</p></div></div><div class="cloud-confirmation"><b>✓ Cloud library is on</b><span>Your playlists and owner access are available anywhere you sign in.</span></div><div class="dialog-actions"><button type="button" class="button button-quiet" id="account-settings">Account settings</button><button type="button" class="button button-outline danger-button" id="sign-out">Sign out</button></div></div></dialog>` : ''}
       <input type="file" id="import-file" accept="application/json,.json" hidden>
     </div>`;
+  const freshPlayer = document.querySelector<HTMLElement>('.queue-player');
+  if (preservedPlayer && freshPlayer &&
+    preservedPlayer.dataset.playerPlaylist === freshPlayer.dataset.playerPlaylist &&
+    preservedPlayer.dataset.playerTrack === freshPlayer.dataset.playerTrack) {
+    freshPlayer.replaceWith(preservedPlayer);
+  }
   bindEvents();
 }
 
@@ -573,7 +580,7 @@ function queuePlayer(playlist: Playlist): string {
   const embed = autoplayEmbed(active);
   const artwork = safeArtwork(active.artworkUrl);
   const sourceClass = active.source.toLowerCase().replace(/\s/g, '-');
-  return `<section class="queue-player source-${sourceClass}" aria-label="Playlist player" aria-live="polite">
+  return `<section class="queue-player source-${sourceClass}" data-player-playlist="${escapeHtml(playlist.id)}" data-player-track="${escapeHtml(active.id)}" aria-label="Playlist player" aria-live="polite">
     <div class="queue-player-bar">
       <div class="queue-art">${artwork ? `<img src="${escapeHtml(artwork)}" alt="">` : '<span>♫</span>'}</div>
       <div class="queue-copy"><span>NOW PLAYING · ${index + 1} OF ${queue.length}</span><strong>${escapeHtml(active.title)}</strong><small>${escapeHtml(active.artist || active.source)}</small></div>
@@ -671,9 +678,12 @@ function updateQueuePlayer(playlist: Playlist): void {
 }
 
 function bindPlayerEvents(): void {
-  document.querySelector('#player-prev')?.addEventListener('click', () => stepPlayer(-1));
-  document.querySelector('#player-next')?.addEventListener('click', () => stepPlayer(1));
-  document.querySelector('#close-player')?.addEventListener('click', closePlayer);
+  const player = document.querySelector<HTMLElement>('.queue-player');
+  if (!player || player.dataset.eventsBound === 'true') return;
+  player.dataset.eventsBound = 'true';
+  player.querySelector('#player-prev')?.addEventListener('click', () => stepPlayer(-1));
+  player.querySelector('#player-next')?.addEventListener('click', () => stepPlayer(1));
+  player.querySelector('#close-player')?.addEventListener('click', closePlayer);
   void captureYouTubeDuration();
 }
 
@@ -706,7 +716,7 @@ async function captureYouTubeDuration(): Promise<void> {
       const read = (): void => {
         const seconds = event.target.getDuration();
         if (seconds > 0 && currentId) {
-          manager.updateSongDuration(currentId, songId, seconds); void syncCurrentShare(); render(); return;
+          manager.updateSongDuration(currentId, songId, seconds); void syncCurrentShare(); return;
         }
         if (++attempts < 8) setTimeout(read, 500);
       };
