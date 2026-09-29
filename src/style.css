@@ -295,6 +295,7 @@ body,.topbar,.sidebar,.footer,.button,.playlist-cover,.track-row{transition:back
 .format-logo svg{display:block;width:38px;height:38px;flex:none;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
 .format-logo .logo-body{fill:currentColor;stroke:currentColor}.format-logo .logo-paper{fill:#fffdf0;stroke:#fffdf0}.format-logo .logo-heavy{fill:currentColor;stroke:currentColor;stroke-width:3}.format-logo .logo-light{fill:none;stroke:#fffdf0;stroke-width:2.5}
 .format-logo-mixtape{color:#873f69}.format-logo-cd-mix{color:#3f6577}.format-logo-playlist{color:#514e91}.format-logo-side-a{color:#4e6543}
+.playlist-nav-item>.format-logo{flex:none;gap:0}.playlist-nav-item>.format-logo svg{width:23px;height:23px}
 .brand>.format-logo{gap:0}.brand>.format-logo svg{width:35px;height:35px}.brand>.format-logo+span{font:800 18px/1 'DM Sans',sans-serif;letter-spacing:-.35px}
 .cover-format-logo,.art-format-logo{position:absolute;z-index:6;padding:7px 10px;border:1px solid #ffffffaa;border-radius:6px;background:#fffdf0e8;box-shadow:0 5px 15px #221b1730}
 .cover-format-logo{top:12px;right:12px}.art-format-logo{top:20px;left:20px}
