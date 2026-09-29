@@ -1,11 +1,11 @@
 import type { Playlist, PlaylistTheme, Song } from './models';
 
-const STORAGE_KEY = 'side-a.playlists.v1';
+export const PLAYLIST_STORAGE_KEY = 'side-a.playlists.v1';
 const createId = (): string => typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 function readPlaylists(): Playlist[] {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
+    const value: unknown = JSON.parse(localStorage.getItem(PLAYLIST_STORAGE_KEY) ?? '[]');
     if (!Array.isArray(value)) return [];
     return value.filter((item): item is Playlist => item && typeof item.id === 'string' &&
       typeof item.name === 'string' && Array.isArray(item.songs)).map(item => ({
@@ -19,11 +19,13 @@ export class PlaylistManager {
   private playlists = readPlaylists();
   listPlaylists(): Playlist[] { return this.playlists; }
   getPlaylist(id: string): Playlist | undefined { return this.playlists.find(playlist => playlist.id === id); }
+  reload(): void { this.playlists = readPlaylists(); }
 
   createPlaylist(name: string, theme: PlaylistTheme = 'mixtape', recipient = '', dedication = '', sender = ''): Playlist {
     const cleanName = name.trim();
     if (!cleanName) throw new Error('Give your playlist a name first.');
     if (cleanName.length > 60) throw new Error('Playlist names can be up to 60 characters.');
+    this.reload();
     const playlist: Playlist = { id: createId(), name: cleanName, songs: [], createdAt: new Date().toISOString(), theme, recipient: recipient.trim().slice(0, 40), sender: sender.trim().slice(0, 40), dedication: dedication.trim().slice(0, 140) };
     this.playlists.unshift(playlist); this.save(); return playlist;
   }
@@ -85,7 +87,7 @@ export class PlaylistManager {
     this.save();
   }
 
-  deletePlaylist(playlistId: string): void { this.playlists = this.playlists.filter(playlist => playlist.id !== playlistId); this.save(); }
+  deletePlaylist(playlistId: string): void { this.reload(); this.playlists = this.playlists.filter(playlist => playlist.id !== playlistId); this.save(); }
 
   sortPlaylist(playlistId: string): void {
     this.requirePlaylist(playlistId).songs.sort((a, b) =>
@@ -94,7 +96,10 @@ export class PlaylistManager {
   }
 
   private requirePlaylist(id: string): Playlist {
+    // Another tab may have changed the library since this page loaded. Always
+    // mutate the freshest saved copy so one window cannot overwrite another.
+    this.reload();
     const playlist = this.getPlaylist(id); if (!playlist) throw new Error('Playlist not found.'); return playlist;
   }
-  private save(): void { localStorage.setItem(STORAGE_KEY, JSON.stringify(this.playlists)); }
+  private save(): void { localStorage.setItem(PLAYLIST_STORAGE_KEY, JSON.stringify(this.playlists)); }
 }

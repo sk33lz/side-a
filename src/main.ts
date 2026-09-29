@@ -1,4 +1,4 @@
-import { PlaylistManager } from '../api/PlaylistManager';
+import { PLAYLIST_STORAGE_KEY, PlaylistManager } from '../api/PlaylistManager';
 import { LinkIngestionService } from '../api/linkIngestionService';
 import type { Playlist, PlaylistTheme, Song } from '../api/models';
 import './style.css';
@@ -828,4 +828,16 @@ void readSharedPlaylist().then(playlist => {
   }
   render();
   if (playlist && currentShareId) void loadReactions(currentShareId);
+});
+
+window.addEventListener('storage', event => {
+  if (event.key !== PLAYLIST_STORAGE_KEY && event.key !== null) return;
+  manager.reload();
+  if (!sharedPlaylist && currentId && !manager.getPlaylist(currentId)) {
+    currentId = manager.listPlaylists()[0]?.id ?? null;
+  }
+  notice = 'Your library was updated in another window.';
+  noticeKind = 'success';
+  render();
+  if (!sharedPlaylist && currentId) loadOwnerReactions(currentId);
 });
