@@ -225,6 +225,38 @@ function isPlaylist(value: unknown): value is Playlist {
 
 function playlistUpdatedAt(playlist: Playlist): string { return playlist.updatedAt ?? playlist.createdAt; }
 
+function ownedShareFingerprint(playlist: Playlist): string {
+  const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...content } = playlist;
+  return JSON.stringify(content);
+}
+
+function deduplicateOwnedShares(playlists: Playlist[]): { playlists: Playlist[]; removed: Array<{ id: string; deletedAt: string }> } {
+  const keptByShare = new Map<string, Playlist>();
+  const removed: Array<{ id: string; deletedAt: string }> = [];
+  const ordered = [...playlists].sort((a, b) => playlistUpdatedAt(b).localeCompare(playlistUpdatedAt(a)));
+  let keys: Record<string, { id: string; token: string }> | null = null;
+  for (const playlist of ordered) {
+    const shareId = playlist.ownerShareId;
+    if (!shareId) continue;
+    const kept = keptByShare.get(shareId);
+    if (!kept) { keptByShare.set(shareId, playlist); continue; }
+    if (ownedShareFingerprint(kept) !== ownedShareFingerprint(playlist)) continue;
+    const deletedAt = new Date().toISOString();
+    removed.push({ id: playlist.id, deletedAt });
+    if (currentId === playlist.id) currentId = kept.id;
+    try {
+      keys ??= shareKeys();
+      if (!keys[kept.id] && keys[playlist.id]) keys[kept.id] = keys[playlist.id];
+      delete keys[playlist.id];
+    } catch { /* Account ownership still preserves editing access. */ }
+  }
+  if (keys) {
+    try { localStorage.setItem(SHARE_KEYS, JSON.stringify(keys)); } catch { /* Cloud ownership remains available. */ }
+  }
+  const removedIds = new Set(removed.map(item => item.id));
+  return { playlists: ordered.filter(playlist => !removedIds.has(playlist.id)), removed };
+}
+
 function switchLocalLibrary(userId: string | null): void {
   try {
     const previousUserId = localStorage.getItem(ACTIVE_LIBRARY_USER_KEY);
@@ -288,8 +320,11 @@ async function reconcileCloudLibrary(): Promise<void> {
     else if (playlistUpdatedAt(localPlaylist) > playlistUpdatedAt(remotePlaylist)) pendingUploads.push(localPlaylist);
   }
   for (const playlist of local.values()) if (!remoteIds.has(playlist.id)) pendingUploads.push(playlist);
-  manager.replaceLibrary([...local.values()].sort((a, b) => playlistUpdatedAt(b).localeCompare(playlistUpdatedAt(a))));
-  for (const playlist of pendingUploads) queueCloudChange({ type: 'upsert', playlist });
+  const deduplicated = deduplicateOwnedShares([...local.values()]);
+  manager.replaceLibrary(deduplicated.playlists);
+  const removedIds = new Set(deduplicated.removed.map(item => item.id));
+  for (const playlist of pendingUploads) if (!removedIds.has(playlist.id)) queueCloudChange({ type: 'upsert', playlist });
+  for (const removal of deduplicated.removed) queueCloudChange({ type: 'delete', ...removal });
 }
 
 async function claimLocalShares(): Promise<void> {
