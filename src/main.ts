@@ -4,7 +4,14 @@ import type { Playlist, PlaylistTheme, Song } from '../api/models';
 import './style.css';
 
 type YouTubePlayer = { getDuration(): number; destroy(): void };
-type YouTubeApi = { Player: new (element: HTMLIFrameElement, options: { events: { onReady(event: { target: YouTubePlayer }): void } }) => YouTubePlayer };
+type YouTubePlayerOptions = {
+  videoId?: string;
+  width?: string;
+  height?: string;
+  playerVars?: Record<string, number>;
+  events: { onReady(event: { target: YouTubePlayer }): void };
+};
+type YouTubeApi = { Player: new (element: HTMLElement, options: YouTubePlayerOptions) => YouTubePlayer };
 type ClerkUser = { id: string; fullName: string | null; firstName: string | null; primaryEmailAddress?: { emailAddress: string } | null };
 type ClerkClient = {
   isSignedIn: boolean;
@@ -481,7 +488,6 @@ async function syncCurrentShare(): Promise<boolean> {
 }
 
 function render(): void {
-  const preservedPlayer = document.querySelector<HTMLElement>('.queue-player');
   let libraryLocked = false;
   try { libraryLocked = authLoading && !!localStorage.getItem(ACTIVE_LIBRARY_USER_KEY); } catch { /* Render the local library if storage cannot be checked. */ }
   const playlists = libraryLocked ? [] : manager.listPlaylists();
@@ -502,7 +508,8 @@ function render(): void {
   const sharedSummary = sharedPlaylist ? `“${sharedPlaylist.name}” · ${sharedPlaylist.songs.length} ${sharedPlaylist.songs.length === 1 ? 'song' : 'songs'}. Reorder it your way and react to each song.` : '';
   document.documentElement.dataset.theme = currentTheme;
   document.title = `${themeLabels[currentTheme]} — Your music, together`;
-  document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
+  const app = document.querySelector<HTMLDivElement>('#app')!;
+  const markup = `
     <div class="app-shell">
       <a class="skip-link" href="#main-content">Skip to playlist</a>
       <header class="topbar"><a class="brand" href="#" aria-label="Choose a playlist format">${formatLogo(currentTheme, false)}<span>${escapeHtml(themeLabels[currentTheme])}<span class="brand-period">.</span></span></a><span class="top-note">A little more together</span>${active || homeFormatChosen ? `<label class="theme-control"><span>FORMAT</span><select id="theme-select" aria-label="Choose a visual theme" ${readonly ? 'disabled title="This is the format chosen for this shared mix"' : ''}>${themes.map(theme => `<option value="${theme}" ${currentTheme === theme ? 'selected' : ''}>${themeLabels[theme]}</option>`).join('')}</select></label>` : ''}<button class="button button-quiet" id="new-playlist">＋ <span>New playlist</span></button>${accountControl}</header>
@@ -523,13 +530,58 @@ function render(): void {
       ${signedIn ? `<dialog id="account-dialog" class="dialog account-dialog"><div><button type="button" class="icon-button dialog-close" data-close aria-label="Close">×</button><span class="eyebrow">YOUR ACCOUNT</span><div class="account-summary"><div class="avatar">${escapeHtml(accountInitial)}</div><div><h2>${escapeHtml(accountName)}</h2><p>${escapeHtml(clerk?.user?.primaryEmailAddress?.emailAddress ?? '')}</p></div></div><div class="cloud-confirmation"><b>✓ Cloud library is on</b><span>Your playlists and owner access are available anywhere you sign in.</span></div><div class="dialog-actions"><button type="button" class="button button-quiet" id="account-settings">Account settings</button><button type="button" class="button button-outline danger-button" id="sign-out">Sign out</button></div></div></dialog>` : ''}
       <input type="file" id="import-file" accept="application/json,.json" hidden>
     </div>`;
-  const freshPlayer = document.querySelector<HTMLElement>('.queue-player');
-  if (preservedPlayer && freshPlayer &&
-    preservedPlayer.dataset.playerPlaylist === freshPlayer.dataset.playerPlaylist &&
-    preservedPlayer.dataset.playerTrack === freshPlayer.dataset.playerTrack) {
-    freshPlayer.replaceWith(preservedPlayer);
-  }
+  renderMarkupPreservingPlayer(app, markup);
   bindEvents();
+}
+
+function renderMarkupPreservingPlayer(app: HTMLElement, markup: string): void {
+  const preservedPlayer = app.querySelector<HTMLElement>('.queue-player');
+  if (!preservedPlayer) { app.innerHTML = markup; return; }
+
+  const next = document.createElement('div');
+  next.innerHTML = markup;
+  const freshPlayer = next.querySelector<HTMLElement>('.queue-player');
+  const samePlayer = freshPlayer &&
+    preservedPlayer.dataset.playerPlaylist === freshPlayer.dataset.playerPlaylist &&
+    preservedPlayer.dataset.playerTrack === freshPlayer.dataset.playerTrack;
+  if (!samePlayer) { app.replaceChildren(...next.childNodes); return; }
+
+  const currentPath = nodePath(app, preservedPlayer);
+  const nextPath = nodePath(next, freshPlayer);
+  if (!currentPath || !nextPath || currentPath.length !== nextPath.length) {
+    app.replaceChildren(...next.childNodes); return;
+  }
+
+  let currentParent: Node = app;
+  let nextParent: Node = next;
+  for (let index = 0; index < currentPath.length; index += 1) {
+    const currentChild = currentPath[index];
+    const nextChild = nextPath[index];
+    if (index > 0 && currentParent instanceof Element && nextParent instanceof Element) syncAttributes(currentParent, nextParent);
+
+    for (const child of [...currentParent.childNodes]) if (child !== currentChild) child.remove();
+    let passedPlayerPath = false;
+    for (const child of [...nextParent.childNodes]) {
+      if (child === nextChild) { passedPlayerPath = true; continue; }
+      const copy = child.cloneNode(true);
+      if (passedPlayerPath) currentParent.appendChild(copy);
+      else currentParent.insertBefore(copy, currentChild);
+    }
+    currentParent = currentChild;
+    nextParent = nextChild;
+  }
+}
+
+function nodePath(root: Node, target: Node): Node[] | null {
+  const path: Node[] = [];
+  let current: Node | null = target;
+  while (current && current !== root) { path.unshift(current); current = current.parentNode; }
+  return current === root ? path : null;
+}
+
+function syncAttributes(current: Element, next: Element): void {
+  for (const attribute of [...current.attributes]) if (!next.hasAttribute(attribute.name)) current.removeAttribute(attribute.name);
+  for (const attribute of [...next.attributes]) current.setAttribute(attribute.name, attribute.value);
 }
 
 function themeArtwork(theme: Theme, cover = false, playlist?: Playlist): string {
@@ -621,7 +673,7 @@ function queuePlayer(playlist: Playlist): string {
       <div class="queue-copy"><span>NOW PLAYING · ${index + 1} OF ${queue.length}</span><strong>${escapeHtml(active.title)}</strong><small>${escapeHtml(active.artist || active.source)}</small></div>
       <div class="queue-controls"><button class="icon-button" id="player-prev" aria-label="Previous playable track">←</button><a class="queue-source" href="${escapeHtml(active.url)}" target="_blank" rel="noreferrer">Open in ${escapeHtml(active.source)}</a><button class="icon-button" id="player-next" aria-label="Next playable track">→</button><button class="icon-button queue-close" id="close-player" aria-label="Close player">×</button></div>
     </div>
-    ${embed ? `<iframe class="queue-frame" ${active.source === 'YouTube' ? `id="youtube-queue-player" data-youtube-duration-song="${escapeHtml(active.id)}"` : ''} src="${escapeHtml(embed)}" title="Now playing ${escapeHtml(active.title)} by ${escapeHtml(active.artist || active.source)}" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation" allowfullscreen></iframe>` : ''}
+    ${embed ? `<iframe class="queue-frame" ${active.source === 'YouTube' ? 'id="youtube-queue-player"' : ''} src="${escapeHtml(embed)}" title="Now playing ${escapeHtml(active.title)} by ${escapeHtml(active.artist || active.source)}" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation" allowfullscreen></iframe>` : ''}
     <p class="queue-help">Use the player’s own play and pause controls. Previous and next move through every playable track in this mix.</p>
   </section>`;
 }
@@ -739,21 +791,38 @@ function loadYouTubeApi(): Promise<YouTubeApi> {
 
 async function captureYouTubeDuration(): Promise<void> {
   if (!currentId || sharedPlaylist) return;
-  const iframe = document.querySelector<HTMLIFrameElement>('[data-youtube-duration-song]');
-  const songId = iframe?.dataset.youtubeDurationSong;
+  const player = document.querySelector<HTMLElement>('.queue-player');
+  const songId = player?.dataset.playerTrack;
   const song = songId ? manager.getPlaylist(currentId)?.songs.find(item => item.id === songId) : undefined;
-  if (!iframe || !songId || !song || song.durationSeconds) return;
+  if (!songId || !song || song.source !== 'YouTube' || song.durationSeconds) return;
+  const embed = songEmbed(song);
+  const videoId = embed ? new URL(embed).pathname.match(/^\/embed\/([a-zA-Z0-9_-]{11})/)?.[1] : undefined;
+  if (!videoId) return;
   try {
     const api = await loadYouTubeApi();
     activeYouTubePlayer?.destroy();
-    activeYouTubePlayer = new api.Player(iframe, { events: { onReady: event => {
+    document.querySelector('#youtube-duration-probe')?.remove();
+    const probe = document.createElement('div');
+    probe.id = 'youtube-duration-probe';
+    probe.style.cssText = 'position:fixed;width:1px;height:1px;left:-10000px;top:-10000px;opacity:0;pointer-events:none';
+    document.body.append(probe);
+    activeYouTubePlayer = new api.Player(probe, { videoId, width: '1', height: '1', playerVars: { autoplay: 0, controls: 0 }, events: { onReady: event => {
       let attempts = 0;
       const read = (): void => {
         const seconds = event.target.getDuration();
         if (seconds > 0 && currentId) {
-          manager.updateSongDuration(currentId, songId, seconds); void syncCurrentShare(); return;
+          manager.updateSongDuration(currentId, songId, seconds);
+          event.target.destroy();
+          activeYouTubePlayer = null;
+          document.querySelector('#youtube-duration-probe')?.remove();
+          void syncCurrentShare(); return;
         }
         if (++attempts < 8) setTimeout(read, 500);
+        else {
+          event.target.destroy();
+          activeYouTubePlayer = null;
+          document.querySelector('#youtube-duration-probe')?.remove();
+        }
       };
       read();
     } } });
