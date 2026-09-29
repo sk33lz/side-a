@@ -27,7 +27,9 @@ export class LinkIngestionService {
 
     const hostname = url.hostname.toLowerCase();
     const isYouTube = ['youtube.com', 'youtu.be'].some(host => matchesHost(hostname, host));
-    const isPlaylist = isYouTube && url.pathname.replace(/\/+$/, '') === '/playlist' && url.searchParams.has('list');
+    // YouTube commonly shares playlists as either /playlist?list=... or
+    // /watch?v=...&list=.... Any YouTube URL with a list id should expand.
+    const isPlaylist = isYouTube && url.searchParams.has('list');
     if (!isPlaylist) return { songs: [await this.ingestSongFromLink(clean)] };
 
     const response = await fetch(`/api/youtube-playlist?url=${encodeURIComponent(url.href)}`);
