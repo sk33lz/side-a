@@ -36,6 +36,7 @@ let pendingOwnerToken: string | null = null;
 let senderOrder: string[] = [];
 type ReactionSummary = { likes: number; dislikes: number; mine: -1 | 0 | 1; latest: -1 | 0 | 1 };
 let reactions: Record<string, ReactionSummary> = {};
+let plays: Record<string, number> = {};
 let youtubeApiPromise: Promise<YouTubeApi> | null = null;
 let activeYouTubePlayer: YouTubePlayer | null = null;
 
@@ -124,10 +125,21 @@ async function loadReactions(shareId: string): Promise<void> {
   } catch { /* Reactions are supplementary; keep the playlist usable offline. */ }
 }
 
+async function loadPlays(shareId: string): Promise<void> {
+  try {
+    const response = await fetch(`/api/playlists/${encodeURIComponent(shareId)}/plays`);
+    if (!response.ok) return;
+    const result = await response.json() as { plays?: Array<{ song_id: string; play_count: number }> };
+    plays = Object.fromEntries((result.plays ?? []).map(item => [item.song_id, Number(item.play_count) || 0]));
+    render();
+  } catch { /* Play counts are supplementary; keep the playlist usable offline. */ }
+}
+
 function loadOwnerReactions(playlistId: string): void {
   const shareId = shareKeys()[playlistId]?.id ?? manager.getPlaylist(playlistId)?.feedbackShareId;
   reactions = {};
-  if (shareId) void loadReactions(shareId);
+  plays = {};
+  if (shareId) { void loadReactions(shareId); void loadPlays(shareId); }
 }
 
 async function readSharedPlaylist(): Promise<Playlist | null> {
@@ -390,14 +402,26 @@ function trackRow(song: Song, index: number, readonly: boolean, playlistLength: 
     : reaction.latest === -1
       ? '<div class="reaction-status reaction-disliked" aria-label="Recipient did not like this track"><span aria-hidden="true">👎</span> Not for me</div>'
       : '<div class="reaction-status reaction-pending" aria-label="No recipient reaction yet"><span aria-hidden="true">○</span> No reaction yet</div>';
+  const playCount = plays[song.id] ?? 0;
+  const ownerActivity = `<div class="owner-activity">${ownerReaction}<div class="play-count" aria-label="${playCount} ${playCount === 1 ? 'play' : 'plays'}"><span aria-hidden="true">▶</span> ${playCount} ${playCount === 1 ? 'play' : 'plays'}</div></div>`;
   const feedback = currentShareId
     ? `<div class="reaction-buttons" role="group" aria-label="Your reaction to ${escapeHtml(song.title)}"><span class="reaction-label">DID YOU LIKE IT?</span><button class="reaction-button reaction-up ${reaction.mine === 1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="1" aria-label="Like ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === 1}"><b aria-hidden="true">👍</b><span>Like</span></button><button class="reaction-button reaction-down ${reaction.mine === -1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="-1" aria-label="Dislike ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === -1}"><b aria-hidden="true">👎</b><span>Not for me</span></button></div>`
-    : (!readonly && hasFeedbackSource) ? ownerReaction : '';
+    : (!readonly && hasFeedbackSource) ? ownerActivity : '';
   const durationControl = readonly
     ? (song.durationSeconds ? `<span class="track-duration">${formatDuration(song.durationSeconds)}</span>` : '')
     : `<label class="duration-editor">Length <input data-duration-song="${escapeHtml(song.id)}" value="${formatDuration(song.durationSeconds)}" placeholder="3:45" inputmode="numeric" aria-label="Length of ${escapeHtml(song.title)} in minutes and seconds"></label>`;
   const actions = reorderable ? `<div class="track-actions"><button class="icon-button move-track" data-move="${escapeHtml(song.id)}" data-offset="-1" aria-label="Move ${escapeHtml(song.title)} up" ${index === 0 ? 'disabled' : ''}>↑</button><button class="icon-button move-track" data-move="${escapeHtml(song.id)}" data-offset="1" aria-label="Move ${escapeHtml(song.title)} down" ${index === playlistLength - 1 ? 'disabled' : ''}>↓</button>${!readonly ? `<button class="icon-button remove-track" data-remove="${escapeHtml(song.id)}" aria-label="Remove ${escapeHtml(song.title)}">×</button>` : ''}</div>` : '<span class="track-actions-spacer"></span>';
-  return `<div class="track-item ${active ? 'is-playing' : ''}"><article class="track-row" data-track="${escapeHtml(song.id)}" ${reorderable ? 'draggable="true"' : ''}><span class="track-number">${reorderable ? '<i class="drag-grip" aria-hidden="true">⠿</i>' : ''}<b>${String(index + 1).padStart(2, '0')}</b></span><div class="track-details"><div class="track-icon ${song.source.toLowerCase().replace(/\s/g, '-')}" aria-hidden="true">${artwork ? `<img src="${escapeHtml(artwork)}" alt="" loading="lazy" decoding="async">` : song.source === 'YouTube' ? '▶' : song.source === 'Spotify' ? '◉' : song.source === 'Apple Music' ? '♫' : song.source === 'Tidal' ? '▦' : '☁'}</div><div class="track-text"><textarea class="song-title" data-song="${escapeHtml(song.id)}" data-field="title" aria-label="Track title" rows="1" ${readonly ? 'readonly' : ''}>${escapeHtml(song.title)}</textarea><input class="song-artist" data-song="${escapeHtml(song.id)}" data-field="artist" aria-label="Artist" placeholder="Add artist name" value="${escapeHtml(song.artist)}" ${readonly ? 'readonly' : ''}>${durationControl}${feedback}</div></div><span class="service-name">${escapeHtml(song.source)}</span>${embed ? `<button class="link-button play-track" data-play-track="${escapeHtml(song.id)}" aria-label="Play ${escapeHtml(song.title)}">${active ? '●' : '▶'} <span>${active ? 'Playing' : 'Play'}</span></button>` : `<a class="link-button" href="${escapeHtml(song.url)}" target="_blank" rel="noreferrer" title="Open track link">↗ <span>Open</span></a>`}${actions}</article></div>`;
+  return `<div class="track-item ${active ? 'is-playing' : ''}"><article class="track-row" data-track="${escapeHtml(song.id)}" ${reorderable ? 'draggable="true"' : ''}><span class="track-number">${reorderable ? '<i class="drag-grip" aria-hidden="true">⠿</i>' : ''}<b>${String(index + 1).padStart(2, '0')}</b></span><div class="track-details"><div class="track-icon ${song.source.toLowerCase().replace(/\s/g, '-')}" aria-hidden="true">${artwork ? `<img src="${escapeHtml(artwork)}" alt="" loading="lazy" decoding="async">` : song.source === 'YouTube' ? '▶' : song.source === 'Spotify' ? '◉' : song.source === 'Apple Music' ? '♫' : song.source === 'Tidal' ? '▦' : '☁'}</div><div class="track-text"><textarea class="song-title" data-song="${escapeHtml(song.id)}" data-field="title" aria-label="Track title" rows="1" ${readonly ? 'readonly' : ''}>${escapeHtml(song.title)}</textarea><input class="song-artist" data-song="${escapeHtml(song.id)}" data-field="artist" aria-label="Artist" placeholder="Add artist name" value="${escapeHtml(song.artist)}" ${readonly ? 'readonly' : ''}>${durationControl}${feedback}</div></div><span class="service-name">${escapeHtml(song.source)}</span>${embed ? `<button class="link-button play-track" data-play-track="${escapeHtml(song.id)}" aria-label="Play ${escapeHtml(song.title)}">${active ? '●' : '▶'} <span>${active ? 'Playing' : 'Play'}</span></button>` : `<a class="link-button" data-open-track="${escapeHtml(song.id)}" href="${escapeHtml(song.url)}" target="_blank" rel="noreferrer" title="Open track link">↗ <span>Open</span></a>`}${actions}</article></div>`;
+}
+
+async function recordPlay(songId: string): Promise<void> {
+  if (!sharedPlaylist || !currentShareId) return;
+  try {
+    await fetch(`/api/playlists/${encodeURIComponent(currentShareId)}/plays`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ songId }), keepalive: true,
+    });
+  } catch { /* Counting should never interrupt listening. */ }
 }
 
 function startPlayer(trackId?: string): void {
@@ -410,6 +434,7 @@ function startPlayer(trackId?: string): void {
   }
   playerPlaylistId = playlist.id;
   playerTrackId = queue.some(song => song.id === trackId) ? trackId! : queue[0].id;
+  void recordPlay(playerTrackId);
   playTapeButtonSound();
   if (document.querySelector('.queue-player') && playerPlaylistId === playlist.id) {
     updateQueuePlayer(playlist);
@@ -428,6 +453,7 @@ function stepPlayer(offset: -1 | 1): void {
   if (!queue.length) return;
   const current = Math.max(0, queue.findIndex(song => song.id === playerTrackId));
   playerTrackId = queue[(current + offset + queue.length) % queue.length].id;
+  void recordPlay(playerTrackId);
   updateQueuePlayer(playlist);
   requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(offset < 0 ? '#player-prev' : '#player-next')?.focus());
 }
@@ -557,6 +583,7 @@ function bindEvents(): void {
   app.querySelector('#reset-shared-order')?.addEventListener('click', resetSharedOrder);
   app.querySelectorAll<HTMLButtonElement>('[data-react]').forEach(button => button.addEventListener('click', () => void setReaction(button.dataset.react!, Number(button.dataset.reaction) as -1 | 1)));
   app.querySelectorAll<HTMLElement>('[data-play-track]').forEach(button => button.addEventListener('click', () => startPlayer(button.dataset.playTrack)));
+  app.querySelectorAll<HTMLElement>('[data-open-track]').forEach(link => link.addEventListener('click', () => void recordPlay(link.dataset.openTrack!)));
   bindPlayerEvents();
   app.querySelectorAll<HTMLButtonElement>('[data-move]').forEach(button => button.addEventListener('click', () => {
     if (sharedPlaylist) { moveSharedSong(button.dataset.move!, Number(button.dataset.offset) as -1 | 1); return; }
@@ -586,7 +613,7 @@ function bindEvents(): void {
   app.querySelector('#export-playlist')?.addEventListener('click', exportPlaylist);
   app.querySelector('#delete-playlist')?.addEventListener('click', deletePlaylist);
   app.querySelector('#save-shared')?.addEventListener('click', saveShared);
-  app.querySelector('#close-shared')?.addEventListener('click', () => { sharedPlaylist = null; currentShareId = null; pendingOwnerToken = null; reactions = {}; history.replaceState(null, '', location.pathname + location.search); render(); });
+  app.querySelector('#close-shared')?.addEventListener('click', () => { sharedPlaylist = null; currentShareId = null; pendingOwnerToken = null; reactions = {}; plays = {}; history.replaceState(null, '', location.pathname + location.search); render(); });
   app.querySelectorAll('#import-trigger').forEach(el => el.addEventListener('click', () => document.querySelector<HTMLInputElement>('#import-file')!.click()));
   app.querySelector('#dismiss-notice')?.addEventListener('click', () => { notice = ''; render(); });
   app.querySelectorAll<HTMLElement>('[data-close]').forEach(el => el.addEventListener('click', () => el.closest('dialog')?.close()));
