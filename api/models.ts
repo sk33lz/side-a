@@ -22,6 +22,7 @@ export interface Playlist {
   recipient?: string;
   sender?: string;
   dedication?: string;
+  feedbackShareId?: string;
 }
 
 export interface SharedPlaylist {

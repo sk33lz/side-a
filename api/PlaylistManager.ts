@@ -37,6 +37,10 @@ export class PlaylistManager {
 
   updateTheme(playlistId: string, theme: PlaylistTheme): void { this.requirePlaylist(playlistId).theme = theme; this.save(); }
 
+  setFeedbackShareId(playlistId: string, shareId: string): void {
+    this.requirePlaylist(playlistId).feedbackShareId = shareId; this.save();
+  }
+
   updateDetails(playlistId: string, recipient: string, dedication: string, sender = ''): void {
     const playlist = this.requirePlaylist(playlistId);
     playlist.recipient = recipient.trim().slice(0, 40);

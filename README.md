@@ -36,6 +36,8 @@ The included `netlify.toml` still supports the static app on Netlify, but Netlif
 
 Choose **Share playlist** to create a live link backed by D1. The owner can edit and reorder the playlist, and the recipient sees the latest version when they open or refresh the link. The recipient can save an editable copy. Playlist JSON files can also be exported and imported. Older snapshot links remain supported.
 
+After sharing, choose **Recovery link** to copy a separate private owner URL. Opening it on a new browser restores the playlist, edit authority, and its connection to recipient feedback. The recovery URL contains the owner token in its fragment, which is not sent to the server during navigation; anyone who receives that URL can edit the playlist, so it must not be sent to recipients.
+
 The edit credential stays in the owner's browser and is stored as a hash in D1. Anyone with the share link can view that playlist, but only the owner browser that created it can update the shared record.
 
 Track links are organized locally, while public YouTube playlists can be expanded through the server-side YouTube Data API integration. Playlist imports preserve the YouTube order and include available titles, channels, artwork, and durations. Private YouTube playlists require OAuth and are not supported.

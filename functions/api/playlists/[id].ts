@@ -25,6 +25,15 @@ export const onRequestGet: PagesFunction<Env> = async ({ params, env }) => {
   catch { return json({ error: 'Shared playlist data is unavailable.' }, 500); }
 };
 
+export const onRequestPost: PagesFunction<Env> = async ({ request, params, env }) => {
+  const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+  if (token.length < 32) return json({ error: 'Owner access is required.' }, 401);
+  const tokenHash = await hashToken(token);
+  const row = await env.DB.prepare('SELECT id FROM shared_playlists WHERE id = ? AND edit_token_hash = ?')
+    .bind(params.id, tokenHash).first<{ id: string }>();
+  return row ? json({ valid: true }) : json({ error: 'This recovery link is no longer valid.' }, 403);
+};
+
 export const onRequestPut: PagesFunction<Env> = async ({ request, params, env }) => {
   const token = request.headers.get('Authorization')?.replace(/^Bearer\s+/i, '') ?? '';
   if (token.length < 32) return json({ error: 'Edit access is required.' }, 401);

@@ -32,6 +32,7 @@ let playerTrackId: string | null = null;
 let playerPlaylistId: string | null = null;
 let buttonAudio: AudioContext | null = null;
 let currentShareId: string | null = null;
+let pendingOwnerToken: string | null = null;
 let senderOrder: string[] = [];
 type ReactionSummary = { likes: number; dislikes: number; mine: -1 | 0 | 1; latest: -1 | 0 | 1 };
 let reactions: Record<string, ReactionSummary> = {};
@@ -124,7 +125,7 @@ async function loadReactions(shareId: string): Promise<void> {
 }
 
 function loadOwnerReactions(playlistId: string): void {
-  const shareId = shareKeys()[playlistId]?.id;
+  const shareId = shareKeys()[playlistId]?.id ?? manager.getPlaylist(playlistId)?.feedbackShareId;
   reactions = {};
   if (shareId) void loadReactions(shareId);
 }
@@ -135,6 +136,8 @@ async function readSharedPlaylist(): Promise<Playlist | null> {
   if (shareId) {
     try {
       currentShareId = shareId;
+      const ownerToken = hash.get('owner');
+      pendingOwnerToken = ownerToken && /^[a-zA-Z0-9_-]{32,120}$/.test(ownerToken) ? ownerToken : null;
       const response = await fetch(`/api/playlists/${encodeURIComponent(shareId)}`);
       if (!response.ok) return null;
       const result: unknown = await response.json();
@@ -287,7 +290,7 @@ function render(): void {
         </aside>
         <section class="content" id="main-content" tabindex="-1">
           ${notice ? `<div class="toast ${noticeKind === 'error' ? 'toast-error' : ''}" role="status">${escapeHtml(notice)}<button id="dismiss-notice" aria-label="Dismiss">×</button></div>` : ''}
-          ${sharedPlaylist ? `<div class="shared-banner"><span class="shared-icon">↗</span><div><strong>Someone shared a playlist with you</strong><span>Reorder it your way and react to the tracks. Your order stays on this device.</span></div><button class="button button-dark" id="save-shared">Save a copy</button><button class="icon-button banner-close" id="close-shared" aria-label="Close shared playlist">×</button></div>` : ''}
+          ${sharedPlaylist ? `<div class="shared-banner ${pendingOwnerToken ? 'owner-recovery-banner' : ''}"><span class="shared-icon">${pendingOwnerToken ? '⌁' : '↗'}</span><div><strong>${pendingOwnerToken ? 'Private recovery link opened' : 'Someone shared a playlist with you'}</strong><span>${pendingOwnerToken ? 'Restore this mix, its editing access, and recipient feedback to this browser.' : 'Reorder it your way and react to the tracks. Your order stays on this device.'}</span></div><button class="button button-dark" id="save-shared">${pendingOwnerToken ? 'Restore owner access' : 'Save a copy'}</button><button class="icon-button banner-close" id="close-shared" aria-label="Close shared playlist">×</button></div>` : ''}
           ${active ? playlistView(active, readonly) : welcomeView()}
         </section>
       </main>
@@ -336,11 +339,12 @@ function playlistView(playlist: Playlist, readonly: boolean): string {
   const durationHelp = !readonly && playlist.songs.length && !duration.complete
     ? `<p class="duration-help"><b>${knownDurations} of ${playlist.songs.length}</b> track lengths known. Play each YouTube track once or enter its length as <strong>m:ss</strong>.</p>` : '';
   const canPlay = playableSongs(playlist).length > 0;
+  const ownerCredentials = !readonly && currentId ? shareKeys()[currentId] : undefined;
   const listenButton = canPlay ? `<button class="button button-play" id="play-mix">▶ <span>${playerOpen && playerPlaylistId === playlist.id ? 'Restart mix' : 'Play mix'}</span></button>` : '';
   return `<div class="playlist-page">
     <div class="playlist-cover theme-cover theme-cover-${currentTheme} ${customDedication ? 'has-dedication' : ''}"><div class="cover-format-logo">${formatLogo(currentTheme)}</div>${dedicationNote}${cover}<span class="cover-label">${coverLabel[currentTheme]}</span></div>
     <div class="playlist-heading">
-      <div class="playlist-heading-top"><span class="eyebrow">${readonly ? 'SHARED WITH YOU' : 'YOUR COLLECTION'}</span><div class="heading-actions">${!readonly ? `<button class="button button-outline" id="export-playlist">↓ <span>Export</span></button><button class="button button-outline" id="share-playlist">↗ <span>Copy live link</span></button><button class="button button-outline danger-button" id="delete-playlist" aria-label="Delete playlist">× <span>Delete</span></button>` : ''}</div></div>
+      <div class="playlist-heading-top"><span class="eyebrow">${readonly ? 'SHARED WITH YOU' : 'YOUR COLLECTION'}</span><div class="heading-actions">${!readonly ? `<button class="button button-outline" id="export-playlist">↓ <span>Export</span></button><button class="button button-outline" id="share-playlist">↗ <span>Copy live link</span></button>${ownerCredentials ? '<button class="button button-outline" id="copy-recovery-link">⌁ <span>Recovery link</span></button>' : ''}<button class="button button-outline danger-button" id="delete-playlist" aria-label="Delete playlist">× <span>Delete</span></button>` : ''}</div></div>
       <h1>${escapeHtml(playlist.name)}</h1>
       <p class="playlist-meta"><span class="avatar tiny">${readonly ? '♥' : 's'}</span> ${playlist.recipient ? `Made for <strong>${escapeHtml(playlist.recipient)}</strong>` : readonly ? 'Shared by someone' : 'Your collection'}${playlist.sender ? ` by <strong>${escapeHtml(playlist.sender)}</strong>` : ''} <span class="meta-separator">·</span> ${songs.length} ${songs.length === 1 ? 'track' : 'tracks'}${durationMeta}</p>
       ${customDedication ? '' : `<p class="playlist-description">${escapeHtml(dedication)}</p>`}
@@ -380,6 +384,7 @@ function trackRow(song: Song, index: number, readonly: boolean, playlistLength: 
   const active = playerOpen && playerTrackId === song.id;
   const reorderable = !readonly || !!currentShareId;
   const reaction = reactions[song.id] ?? { likes: 0, dislikes: 0, mine: 0, latest: 0 };
+  const hasFeedbackSource = !!currentId && !!(shareKeys()[currentId]?.id ?? manager.getPlaylist(currentId)?.feedbackShareId);
   const ownerReaction = reaction.latest === 1
     ? '<div class="reaction-status reaction-liked" aria-label="Recipient liked this track"><span aria-hidden="true">👍</span> Liked</div>'
     : reaction.latest === -1
@@ -387,7 +392,7 @@ function trackRow(song: Song, index: number, readonly: boolean, playlistLength: 
       : '<div class="reaction-status reaction-pending" aria-label="No recipient reaction yet"><span aria-hidden="true">○</span> No reaction yet</div>';
   const feedback = currentShareId
     ? `<div class="reaction-buttons" role="group" aria-label="Your reaction to ${escapeHtml(song.title)}"><span class="reaction-label">DID YOU LIKE IT?</span><button class="reaction-button reaction-up ${reaction.mine === 1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="1" aria-label="Like ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === 1}"><b aria-hidden="true">👍</b><span>Like</span></button><button class="reaction-button reaction-down ${reaction.mine === -1 ? 'selected' : ''}" data-react="${escapeHtml(song.id)}" data-reaction="-1" aria-label="Dislike ${escapeHtml(song.title)}" aria-pressed="${reaction.mine === -1}"><b aria-hidden="true">👎</b><span>Not for me</span></button></div>`
-    : (!readonly && currentId && shareKeys()[currentId]) ? ownerReaction : '';
+    : (!readonly && hasFeedbackSource) ? ownerReaction : '';
   const durationControl = readonly
     ? (song.durationSeconds ? `<span class="track-duration">${formatDuration(song.durationSeconds)}</span>` : '')
     : `<label class="duration-editor">Length <input data-duration-song="${escapeHtml(song.id)}" value="${formatDuration(song.durationSeconds)}" placeholder="3:45" inputmode="numeric" aria-label="Length of ${escapeHtml(song.title)} in minutes and seconds"></label>`;
@@ -577,10 +582,11 @@ function bindEvents(): void {
     row.addEventListener('dragend', () => { draggedTrack = ''; row.classList.remove('dragging'); app.querySelectorAll('.drop-target').forEach(item => item.classList.remove('drop-target')); });
   });
   app.querySelector('#share-playlist')?.addEventListener('click', sharePlaylist);
+  app.querySelector('#copy-recovery-link')?.addEventListener('click', copyRecoveryLink);
   app.querySelector('#export-playlist')?.addEventListener('click', exportPlaylist);
   app.querySelector('#delete-playlist')?.addEventListener('click', deletePlaylist);
   app.querySelector('#save-shared')?.addEventListener('click', saveShared);
-  app.querySelector('#close-shared')?.addEventListener('click', () => { sharedPlaylist = null; currentShareId = null; reactions = {}; history.replaceState(null, '', location.pathname + location.search); render(); });
+  app.querySelector('#close-shared')?.addEventListener('click', () => { sharedPlaylist = null; currentShareId = null; pendingOwnerToken = null; reactions = {}; history.replaceState(null, '', location.pathname + location.search); render(); });
   app.querySelectorAll('#import-trigger').forEach(el => el.addEventListener('click', () => document.querySelector<HTMLInputElement>('#import-file')!.click()));
   app.querySelector('#dismiss-notice')?.addEventListener('click', () => { notice = ''; render(); });
   app.querySelectorAll<HTMLElement>('[data-close]').forEach(el => el.addEventListener('click', () => el.closest('dialog')?.close()));
@@ -708,11 +714,48 @@ async function sharePlaylist(): Promise<void> {
   render();
 }
 
-function saveShared(): void {
+async function saveShared(): Promise<void> {
   if (!sharedPlaylist) return;
+  const sourceShareId = currentShareId;
+  const ownerToken = pendingOwnerToken;
+  if (sourceShareId && ownerToken) {
+    try {
+      const response = await fetch(`/api/playlists/${encodeURIComponent(sourceShareId)}`, {
+        method: 'POST', headers: { Authorization: `Bearer ${ownerToken}` },
+      });
+      if (!response.ok) throw new Error();
+    } catch {
+      pendingOwnerToken = null;
+      notice = 'This private recovery link is invalid or has been replaced.'; noticeKind = 'error'; render(); return;
+    }
+  }
   const copy = manager.createPlaylist(sharedPlaylist.name, sharedPlaylist.theme ?? 'mixtape', sharedPlaylist.recipient ?? '', sharedPlaylist.dedication ?? '', sharedPlaylist.sender ?? '');
-  sharedPlaylist.songs.forEach(song => manager.addSong(copy.id, { ...song, id: createId() }));
-  currentId = copy.id; sharedPlaylist = null; history.replaceState(null, '', location.pathname + location.search); notice = 'Saved your own copy. You can now edit and share it.'; render();
+  manager.addSongs(copy.id, sharedPlaylist.songs.map(song => ({ ...song })));
+  if (sourceShareId) manager.setFeedbackShareId(copy.id, sourceShareId);
+  if (sourceShareId && ownerToken) {
+    const keys = shareKeys();
+    localStorage.setItem(SHARE_KEYS, JSON.stringify({ ...keys, [copy.id]: { id: sourceShareId, token: ownerToken } }));
+  }
+  currentId = copy.id; sharedPlaylist = null; currentShareId = null; pendingOwnerToken = null;
+  history.replaceState(null, '', location.pathname + location.search);
+  notice = ownerToken ? 'Owner access restored. Keep your private recovery link somewhere safe.' : 'Saved a copy linked to this playlist’s feedback.';
+  noticeKind = 'success'; loadOwnerReactions(copy.id); render();
+}
+
+async function copyRecoveryLink(): Promise<void> {
+  if (!currentId) return;
+  const credentials = shareKeys()[currentId];
+  if (!credentials) return;
+  const params = new URLSearchParams({ share: credentials.id, owner: credentials.token });
+  const url = `${location.origin}${location.pathname}#${params.toString()}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    notice = 'Private recovery link copied. Anyone with this link can edit the mix, so keep it secret.';
+  } catch {
+    prompt('Copy your private recovery link and keep it secret:', url);
+    notice = 'Recovery link ready. Keep it somewhere safe outside this browser.';
+  }
+  noticeKind = 'success'; render();
 }
 
 function downloadPlaylist(playlist: Playlist): void {
